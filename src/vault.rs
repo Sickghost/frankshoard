@@ -53,8 +53,11 @@ pub struct VaultFile {
 
 impl VaultFile {
     pub fn create_empty_vault(path: &Path) -> Result<Self, AppError> {
-        // todo implement
-        Err(AppError::VaultNotFound)
+        if path.try_exists()? {
+            return Err(AppError::VaultAlreadyExists);
+        } else {
+            // todo implement
+            return Err(AppError::VaultNotFound);
     }
 
     pub fn from_path(path: &Path) -> Result<Self, AppError> {
