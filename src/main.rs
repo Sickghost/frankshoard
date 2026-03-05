@@ -3,10 +3,8 @@ mod error;
 mod init;
 mod vault;
 
-use clap::Parser;
-use clap::Subcommand;
+use clap::{Parser,Subcommand};
 
-use crate::error::AppError;
 
 #[derive(Parser)]
 struct Cli {
@@ -23,18 +21,22 @@ enum Commands {
         service: String,
         #[arg(short, long)]
         username: String,
-    }
+    },
 }
 
 fn main() {
     let args = Cli::parse();
 
     match args.command {
-        Commands::Init => if let Err(e) = init::run() {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        },
+        Commands::Init => {
+            if let Err(e) = init::run() {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
         Commands::List => println!("List"),
-        Commands::Add{service, username} => println!("Add service {service} for user {username}")
+        Commands::Add { service, username } => {
+            println!("Add service {service} for user {username}")
+        }
     }
 }
