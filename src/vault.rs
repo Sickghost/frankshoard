@@ -58,7 +58,6 @@ pub struct VaultFile {
     salt: [u8; 32],
     nonce: [u8; 12],
     ciphertext: Vec<u8>,
-    path: PathBuf,
 }
 
 impl VaultFile {
@@ -72,10 +71,9 @@ impl VaultFile {
             SysRng.try_fill_bytes(&mut nonce)?;
 
             let vault_file = VaultFile {
-                salt: salt,
-                nonce: nonce,
+                salt,
+                nonce,
                 ciphertext: Vec::new(),
-                path: path.to_path_buf(),
             };
             Ok(vault_file)
         }
@@ -103,7 +101,6 @@ impl VaultFile {
                 salt,
                 nonce,
                 ciphertext,
-                path: path.to_path_buf(),
             };
             Ok(vault_file)
         } else {
@@ -111,7 +108,7 @@ impl VaultFile {
         }
     }
 
-    pub fn write(&self) -> Result<(), FranksHoardError> {
+    pub fn write(&self, path: &Path) -> Result<(), FranksHoardError> {
         Ok(())
     }
 

@@ -37,7 +37,7 @@ impl Config {
         let conf = Config {
             vault_file: home.join(".frankshoard/vault.db"),
             argon2: Argon2Conf {
-                memory: 65536,
+                memory: 1953000,
                 iterations: 3,
                 parallelism: 1,
             },
