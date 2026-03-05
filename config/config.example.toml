@@ -7,7 +7,7 @@ vault_file = "~/.frankshoard/vault.db"
 
 # WARNING: Once the vault is created, DO NOT MODIFY argon2, or you won't be able to decrypt your vault
 [argon2]
-memory = 65536
+memory = 1953000
 iterations = 3
 parallelism = 1
 
