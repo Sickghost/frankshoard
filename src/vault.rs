@@ -1,7 +1,7 @@
 use rand::{rngs::SysRng, TryRng};
 use std::fs;
 use std::io::{Cursor, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use url::Url;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;

@@ -68,3 +68,9 @@ impl From<rand::rngs::SysError> for FranksHoardError {
         FranksHoardError::RandError(e)
     }
 }
+
+impl From<argon2::Error> for FranksHoardError {
+    fn from(e: argon2::Error) -> Self {
+        FranksHoardError::Encryption(e.to_string())
+    }
+}

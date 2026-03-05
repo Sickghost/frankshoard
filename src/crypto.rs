@@ -2,34 +2,36 @@ use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, KeyInit};
 use argon2::{Argon2, Algorithm, Version, Params};
 use zeroize::Zeroizing;
+use std::time::Instant;
+
+use crate::config::Config;
+use crate::error::FranksHoardError;
+
 
 pub struct MasterKey {
-    key: Zeroizing<Box<[u8; 32]>>, // A box, because we want the key in the heap
+    key: Zeroizing<Box<[u8; 32]>>, // A box, abecause we want the key in the heap
+    creation_time: Instant,
 }
 
 impl MasterKey {
-    pub fn new(key_bytes: Box<[u8; 32]>) -> Self {
-        MasterKey {
-            key: Zeroizing::new(key_bytes),
-        }
+    pub fn from_password(password: &Zeroizing<String>, salt: &[u8; 32], config: &Config) -> Result<MasterKey, FranksHoardError>{
+
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(config.argon2.memory, config.argon2.iterations, config.argon2.parallelism, None)?
+        );
+
+        // derive directly into the boxed slice
+        let mut key: Zeroizing<Box<[u8; 32]>> = Zeroizing::new(Box::new([0u8; 32]));
+        argon2.hash_password_into(password.as_bytes(), salt, key.as_mut())?;
+        Ok(MasterKey {
+            key,
+            creation_time: Instant::now(),
+        })
     }
 
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.key
     }
-}
-
-// fix that, just a place to drop code for now while I read the doc...
-fn temp_derive_key() {
-
-    // get params from conf here and all that.
-    let argon2 = Argon2::new(
-        Algorithm::Argon2id,
-        Version::V0x13,
-        Params::new(memory, iterations, parallelism, None)?
-    );
-
-    let mut key_bytes: Zeroizing<Box<[u8; 32]>> = Zeroizing::new(Box::new([0u8; 32]));
-    // derive directly into the boxed slice
-    argon2.hash_password_into(password, &salt, key_bytes.as_mut())?;
 }
