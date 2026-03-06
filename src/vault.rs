@@ -1,5 +1,6 @@
 use std::fs;
-use std::io::{Cursor, Read, Write};
+use std::fs::OpenOptions;
+use std::io::{Cursor, Read, Write, Seek, SeekFrom};
 use std::path::Path;
 use postcard::{to_allocvec, from_bytes};
 use serde::{Serialize, Deserialize};
@@ -123,8 +124,15 @@ impl VaultFile {
         }
     }
 
-    pub fn write(&self, path: &Path) -> Result<(), FranksHoardError> {
-        // TODO Write vault to file.
+    pub fn save(&self, path: &Path) -> Result<(), FranksHoardError> {
+        // We could do complicated stuff (seek past the salt, truncate and write new nonce and ciphertext,
+        // have special code for new file...) to not have to rewrite the salt but honestly, it's only 32 bytes
+        // so we just zap the whole file each time.
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(path)?;
+        file.write_all(&self.salt)?;
+        file.write_all(&self.nonce)?;
+        file.write_all(&self.ciphertext)?;
+        file.flush()?;
         Ok(())
     }
 
@@ -132,5 +140,17 @@ impl VaultFile {
         let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
         self.ciphertext = crypto::encrypt_bytes(key, &mut self.nonce, &clear_data)?;
         Ok(())
+    }
+
+    pub fn salt(&self) -> &[u8; 32] {
+        &self.salt
+    }
+
+    pub fn nonce(&self) -> &[u8; 12] {
+        &self.nonce
+    }
+
+    pub fn ciphertext(&self) -> &[u8] {
+        &self.ciphertext
     }
 }
