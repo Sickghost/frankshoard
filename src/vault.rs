@@ -21,7 +21,7 @@ pub struct WebsiteEntry {
     pub note: Option<String>,
 }
 
-#[derive(ZeroizeOnDrop,Serialize, Deserialize, Debug)]
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
 pub struct NoteEntry {
     #[zeroize(skip)]
     pub id: Uuid,
