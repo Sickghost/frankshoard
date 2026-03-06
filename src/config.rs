@@ -9,7 +9,7 @@ use crate::error::FranksHoardError;
 pub struct Argon2Conf {
     pub memory: u32,
     pub iterations: u32,
-    pub parallelism: u8,
+    pub parallelism: u32,
 }
 
 #[derive(Deserialize, Serialize)]

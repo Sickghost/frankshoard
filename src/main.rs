@@ -2,6 +2,7 @@ mod config;
 mod error;
 mod init;
 mod vault;
+mod crypto;
 
 use clap::{Parser,Subcommand};
 

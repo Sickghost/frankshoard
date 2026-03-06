@@ -1,59 +1,76 @@
-use rand::{rngs::SysRng, TryRng};
 use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
+use postcard::{to_allocvec, from_bytes};
+use serde::{Serialize, Deserialize};
 use url::Url;
 use uuid::Uuid;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::error::FranksHoardError;
+use crate::crypto::{self, MasterKey};
 
-#[derive(ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
 pub struct WebsiteEntry {
     #[zeroize(skip)]
-    id: Uuid,
+    pub id: Uuid,
     #[zeroize(skip)]
-    url: Url,
-    username: String,
-    password: String,
-    note: Option<String>,
+    pub url: Url,
+    pub username: String,
+    pub password: String,
+    pub note: Option<String>,
 }
 
-#[derive(ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop,Serialize, Deserialize, Debug)]
 pub struct NoteEntry {
     #[zeroize(skip)]
-    id: Uuid,
-    note: String,
+    pub id: Uuid,
+    pub note: String,
 }
 
-#[derive(ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
 pub enum Entry {
     Website(WebsiteEntry),
     Note(NoteEntry),
 }
 
-#[derive(ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
 pub struct DecryptedVault {
     entries: Vec<Entry>, // data in a Vec are always on the heap, so should be safe to just zero them like that
 }
 
 impl DecryptedVault {
-    pub fn from_vault_file(vault_file: &VaultFile) -> Result<Self, FranksHoardError> {
-        // TODO: Decrypt the vault
+    pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, FranksHoardError> {
+        let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
+        let vault: DecryptedVault = from_bytes(&bytes)?;
+        Ok(vault)
+    }
+
+    pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, FranksHoardError> {
+        // TODO: serialize to byte
         Err(FranksHoardError::VaultNotFound)
     }
 
     // Public method to add entries
     pub fn add_entry(&mut self, item: Entry) {
+        // todo
         self.entries.push(item);
     }
 
     // Public getter: Returns a slice for safe, read-only access
     pub fn get_entries(&self) -> &[Entry] {
+        // todo
         &self.entries
+    }
+
+    pub fn update_entry(&mut self, entry: Entry) -> Result<(), FranksHoardError> {
+        // todo
+        // Update an existing entry (using uuis to find it)
+        Ok(())
     }
 }
 
+#[derive(Debug)]
 pub struct VaultFile {
     salt: [u8; 32],
     nonce: [u8; 12],
@@ -66,13 +83,11 @@ impl VaultFile {
             return Err(FranksHoardError::VaultAlreadyExists);
         } else {
             let mut salt = [0u8; 32];
-            SysRng.try_fill_bytes(&mut salt)?;
-            let mut nonce = [0u8; 12];
-            SysRng.try_fill_bytes(&mut nonce)?;
+            crypto::fill_salt(&mut salt);
 
             let vault_file = VaultFile {
                 salt,
-                nonce,
+                nonce: [0u8; 12],  // we don't care, this nonce will never be used
                 ciphertext: Vec::new(),
             };
             Ok(vault_file)
@@ -109,14 +124,13 @@ impl VaultFile {
     }
 
     pub fn write(&self, path: &Path) -> Result<(), FranksHoardError> {
+        // TODO Write vault to file.
         Ok(())
     }
 
-    pub fn update_cyphertext(&mut self, decrypted_vault: &DecryptedVault) -> Result<(), FranksHoardError> {
-        // change the nonce
-        SysRng.try_fill_bytes(&mut self.nonce)?;
-
-        // todo serialize and encrypt.  Write crypto and come back here.
+    pub fn update_cyphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), FranksHoardError> {
+        let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
+        self.ciphertext = crypto::encrypt_bytes(key, &mut self.nonce, &clear_data)?;
         Ok(())
     }
 }

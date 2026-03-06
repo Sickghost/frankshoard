@@ -20,7 +20,7 @@ Security decisions are made deliberately and documented here:
 
 **Key Derivation**
 - Master password is never stored directly
-- Keys are derived using **Argon2id** — the winner of the Password Hashing Competition and the current recommended standard for password-based key derivation
+- Keys are derived using **Argon2id** 
 - Argon2id is preferred over PBKDF2 or bcrypt due to its memory-hardness, which significantly raises the cost of GPU-based brute-force attacks
 
 **Vault Encryption**
@@ -31,6 +31,9 @@ Security decisions are made deliberately and documented here:
 **Offline First**
 - No network calls, no cloud sync, no third-party servers
 - Your vault never leaves your machine
+
+**Secrecy Crate**
+- The secrecy crate is not used by choice.  I may refactor that later.
 
 ---
 
@@ -60,8 +63,8 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 
 - [x] Project structure and configuration layer
 - [ ] Vault storage and entry management
-- [ ] Argon2id key derivation
-- [ ] AES-256-GCM encryption/decryption
+- [x] Argon2id key derivation
+- [x] AES-256-GCM encryption/decryption
 - [ ] CLI interface
 - [ ] Master password change with vault re-encryption
 - [ ] Export/backup functionality

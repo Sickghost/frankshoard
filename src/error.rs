@@ -9,7 +9,7 @@ pub enum FranksHoardError {
     TomlError(String),
     HomeDirectoryNotFound,
     UrlParseError(String),
-    RandError(rand::rngs::SysError),
+    BinarySerdeError(postcard::Error),
 }
 
 impl std::fmt::Display for FranksHoardError {
@@ -22,11 +22,9 @@ impl std::fmt::Display for FranksHoardError {
             FranksHoardError::MalformedVault(e) => write!(f, "Malformed vault file: {}", e),
             FranksHoardError::InvalidMasterPassword => write!(f, "Invalid master password"),
             FranksHoardError::TomlError(e) => write!(f, "Toml Error : {}", e),
-            FranksHoardError::HomeDirectoryNotFound => {
-                write!(f, "Unable to find home directory when building path")
-            }
+            FranksHoardError::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
             FranksHoardError::UrlParseError(e) => write!(f, "Url Parse Error: {}", e),
-            FranksHoardError::RandError(e) => write!(f, "Random Number Generator Error: {}", e),
+            FranksHoardError::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
         }
     }
 }
@@ -63,14 +61,14 @@ impl From<url::ParseError> for FranksHoardError {
     }
 }
 
-impl From<rand::rngs::SysError> for FranksHoardError {
-    fn from(e: rand::rngs::SysError) -> Self {
-        FranksHoardError::RandError(e)
-    }
-}
-
 impl From<argon2::Error> for FranksHoardError {
     fn from(e: argon2::Error) -> Self {
         FranksHoardError::Encryption(e.to_string())
+    }
+}
+
+impl From<postcard::Error> for FranksHoardError {
+    fn from(e: postcard::Error) -> Self {
+        FranksHoardError::BinarySerdeError(e)
     }
 }
