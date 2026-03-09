@@ -1,11 +1,5 @@
-mod config;
-mod error;
-mod init;
-mod vault;
-mod crypto;
-
 use clap::{Parser,Subcommand};
-
+use dialoguer::{Confirm, Input, Password};
 
 #[derive(Parser)]
 struct Cli {
@@ -26,6 +20,7 @@ enum Commands {
 }
 
 fn main() {
+    // TODO: Redo everything!!
     let args = Cli::parse();
 
     match args.command {

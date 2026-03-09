@@ -1,6 +1,6 @@
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::{Cursor, Read, Write, Seek, SeekFrom};
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use postcard::{to_allocvec, from_bytes};
 use serde::{Serialize, Deserialize};
@@ -11,10 +11,61 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 use crate::error::FranksHoardError;
 use crate::crypto::{self, MasterKey};
 
+
 #[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
-pub struct WebsiteEntry {
+pub enum Entry {
+    BasicPassword(BasicPasswordEntry),
+    Site(SiteEntry),
+    Note(NoteEntry),
+}
+
+impl Entry {
+    pub fn id(&self) -> Uuid {
+        match self {
+            Entry::BasicPassword(b) => b.id(),
+            Entry::Site(s) => s.id(),
+            Entry::Note(n) => n.id(),
+        }
+    }
+}
+
+pub trait FromEntry {
+    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self>;
+}
+
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+pub struct BasicPasswordEntry {
     #[zeroize(skip)]
-    pub id: Uuid,
+    id: Uuid,
+    #[zeroize(skip)]
+    pub username: String,
+    pub password: String,
+}
+
+impl BasicPasswordEntry {
+    pub fn new(username: String, password: String) -> Self {
+        BasicPasswordEntry {
+            id: Uuid::new_v4(),
+            username,
+            password,
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+}
+
+impl FromEntry for BasicPasswordEntry {
+    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self> {
+        if let Entry::BasicPassword(b) = entry { Some(b) } else { None }
+    }
+}
+
+#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+pub struct SiteEntry {
+    #[zeroize(skip)]
+    id: Uuid,
     #[zeroize(skip)]
     pub url: Url,
     pub username: String,
@@ -22,17 +73,52 @@ pub struct WebsiteEntry {
     pub note: Option<String>,
 }
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
-pub struct NoteEntry {
-    #[zeroize(skip)]
-    pub id: Uuid,
-    pub note: String,
+impl SiteEntry {
+    pub fn new(url: Url, username: String, password: String, note: Option<String>) -> Self {
+        SiteEntry {
+            id: Uuid::new_v4(),
+            url,
+            username,
+            password,
+            note,
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+}
+
+impl FromEntry for SiteEntry {
+    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self> {
+        if let Entry::Site(s) = entry { Some(s) } else { None }
+    }
 }
 
 #[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
-pub enum Entry {
-    Website(WebsiteEntry),
-    Note(NoteEntry),
+pub struct NoteEntry {
+    #[zeroize(skip)]
+    id: Uuid,
+    pub note: String,
+}
+
+impl NoteEntry {
+    pub fn new(note: String) -> Self {
+        NoteEntry {
+            id: Uuid::new_v4(),
+            note,
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+}
+
+impl FromEntry for NoteEntry {
+    fn from_entry<'a> (entry: &'a Entry) -> Option<&'a Self> {
+        if let Entry::Note(n) = entry { Some(n) } else { None }
+    }
 }
 
 #[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
@@ -41,33 +127,36 @@ pub struct DecryptedVault {
 }
 
 impl DecryptedVault {
+
+    pub fn new() -> Self {
+        DecryptedVault { entries: Vec::new() }
+    }
+
     pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, FranksHoardError> {
         let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
         let vault: DecryptedVault = from_bytes(&bytes)?;
         Ok(vault)
     }
 
-    pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, FranksHoardError> {
-        // TODO: serialize to byte
-        Err(FranksHoardError::VaultNotFound)
-    }
 
     // Public method to add entries
     pub fn add_entry(&mut self, item: Entry) {
-        // todo
         self.entries.push(item);
+    }
+
+    pub fn remove_entry(&mut self, id_to_remove: Uuid) {
+        if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
+            self.entries.swap_remove(index);
+        }
     }
 
     // Public getter: Returns a slice for safe, read-only access
     pub fn get_entries(&self) -> &[Entry] {
-        // todo
         &self.entries
     }
 
-    pub fn update_entry(&mut self, entry: Entry) -> Result<(), FranksHoardError> {
-        // todo
-        // Update an existing entry (using uuis to find it)
-        Ok(())
+    pub fn get_entries_of<'a, T: FromEntry + 'a>(&'a self) -> impl Iterator<Item = &'a T> + 'a {
+        self.entries.iter().filter_map(|e| T::from_entry(e))
     }
 }
 

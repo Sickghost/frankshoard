@@ -11,7 +11,7 @@ use crate::error::FranksHoardError;
 
 pub struct MasterKey {
     key: Zeroizing<Box<[u8]>>, // A box, because we want the key in the heap
-    creation_time: Instant,
+    creation_time: Instant,  // TODO mechanism to handle that
 }
 
 impl MasterKey {
@@ -19,7 +19,7 @@ impl MasterKey {
         let argon2 = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
-            Params::new(config.argon2.memory, config.argon2.iterations, config.argon2.parallelism, None)?
+            Params::new(config.argon2().memory(), config.argon2().iterations(), config.argon2().parallelism(), None)?
         );
 
         // derive directly into the boxed slice

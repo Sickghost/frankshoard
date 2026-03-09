@@ -7,32 +7,66 @@ use crate::error::FranksHoardError;
 
 #[derive(Deserialize, Serialize)]
 pub struct Argon2Conf {
-    pub memory: u32,
-    pub iterations: u32,
-    pub parallelism: u32,
+    memory: u32,
+    iterations: u32,
+    parallelism: u32,
+}
+
+impl Argon2Conf {
+    pub fn memory(&self) -> u32 {
+        self.memory
+    }
+
+    pub fn iterations(&self) -> u32 {
+        self.iterations
+    }
+
+    pub fn parallelism(&self) -> u32 {
+        self.parallelism
+    }
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct UIConf {
-    pub master_pwd_timeout_seconds: u32,
+    master_pwd_timeout_seconds: u32,
+}
+
+impl UIConf {
+    pub fn master_pwd_timeout_seconds(&self) -> u32 {
+        self.master_pwd_timeout_seconds
+    }
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
-    pub vault_file: PathBuf,
-    pub argon2: Argon2Conf,
-    pub ui: UIConf,
+    vault_file: PathBuf,
+    argon2: Argon2Conf,
+    ui: UIConf,
 }
 
 impl Config {
-    pub fn load(path: &Path) -> Result<Self, FranksHoardError> {
+    pub fn vault_file(&self) -> &PathBuf {
+        self.vault_file()
+    }
+
+    pub fn argon2(&self) -> &Argon2Conf {
+        &self.argon2
+    }
+
+    pub fn ui(&self) -> &UIConf {
+        &self.ui
+    }
+}
+
+impl Config {
+    pub fn from_path(path: &Path) -> Result<Self, FranksHoardError> {
         let config_str = fs::read_to_string(path)?;
         let mut config: Config = toml::from_str(&config_str)?;
         config.vault_file = expand_tilde(&config.vault_file)?;
         Ok(config)
     }
 
-    pub fn from_default(save_if_new: bool) -> Result<Self, FranksHoardError> {
+    pub fn from_default() -> Result<Self, FranksHoardError> {
         let home = home_dir().ok_or(FranksHoardError::HomeDirectoryNotFound)?;
         let conf = Config {
             vault_file: home.join(".frankshoard/vault.db"),
@@ -45,13 +79,6 @@ impl Config {
                 master_pwd_timeout_seconds: 300,
             },
         };
-
-        if save_if_new {
-            let default_path = Config::default_config_path()?;
-            if !default_path.exists() {
-                conf.save_file(&default_path)?;
-            }
-        }
         Ok(conf)
     }
 
@@ -60,7 +87,7 @@ impl Config {
         Ok(home.join(".config/frankshoard/config.toml"))
     }
 
-    fn save_file(&self, path: &Path) -> Result<(), FranksHoardError> {
+    pub fn save_file(&self, path: &Path) -> Result<(), FranksHoardError> {
         let toml_str = toml::to_string(&self)?;
 
         fs::write(path, toml_str)?;
