@@ -1,6 +1,6 @@
 # frankshoard
 
-A secure, offline-first password vault written in Rust.
+A secure, offline password vault written in Rust.
 
 **Status:** Work in progress — check develop branch for updates.  Won't merge into main until I have a minimally working version.
 
@@ -8,7 +8,7 @@ A secure, offline-first password vault written in Rust.
 
 ## About
 
-`frankshoard` is a local password manager built as a hands-on Rust learning project, with a deliberate focus on getting the security design right from the ground up. Rather than relying on external frameworks for the security-critical components, the vault is designed with well-understood, modern cryptographic primitives chosen for their security properties, not just their availability.
+`frankshoard` is a local password manager built as a hands-on Rust learning project, with a deliberate focus on getting the security design right from the ground up. Rather than relying on external frameworks for the security-critical components, the vault is designed with well-understood, modern cryptographic primitives chosen for their security properties.
 
 The name is a portmanteau of *Frank* (the author) and *hoard* — a personal stash of secrets, kept offline and under your control.
 
@@ -16,11 +16,11 @@ The name is a portmanteau of *Frank* (the author) and *hoard* — a personal sta
 
 ## Security Design
 
-Security decisions are made deliberately and documented here:
+Security decisions are documented here:
 
 **Key Derivation**
 - Master password is never stored directly
-- Keys are derived using **Argon2id** — the winner of the Password Hashing Competition and the current recommended standard for password-based key derivation
+- Keys are derived using **Argon2id** 
 - Argon2id is preferred over PBKDF2 or bcrypt due to its memory-hardness, which significantly raises the cost of GPU-based brute-force attacks
 
 **Vault Encryption**
@@ -28,9 +28,8 @@ Security decisions are made deliberately and documented here:
 - AES-GCM provides both confidentiality and integrity — any tampering with the ciphertext is detectable
 - A unique nonce is generated per encryption operation
 
-**Offline First**
-- No network calls, no cloud sync, no third-party servers
-- Your vault never leaves your machine
+**Secrecy Crate**
+- The secrecy crate is not used by choice.  I may refactor that later.
 
 ---
 
@@ -39,8 +38,9 @@ Security decisions are made deliberately and documented here:
 The project is structured around the following modules:
 
 - **config** — handles application configuration, paths, and user preferences
-- **vault** — core vault storage, entry management, and serialization *(in progress)*
-- **crypto** — cryptographic primitives: Argon2id key derivation and AES-GCM encryption/decryption *(planned)*
+- **vault** — core vault storage, entry management, and serialization 
+- **crypto** — cryptographic primitives: Argon2id key derivation and AES-GCM encryption/decryption 
+- **lib** — the public api
 - **cli** — command-line interface for interacting with the vault *(planned)*
 
 ---
@@ -59,11 +59,15 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 ## Roadmap
 
 - [x] Project structure and configuration layer
-- [ ] Vault storage and entry management
-- [ ] Argon2id key derivation
-- [ ] AES-256-GCM encryption/decryption
+- [x] Vault storage and entry management
+- [x] Argon2id key derivation
+- [x] AES-256-GCM encryption/decryption
+- [ ] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
 - [ ] CLI interface
-- [ ] Master password change with vault re-encryption
+
+Release 1
+
+- [ ] Test Suite
 - [ ] Export/backup functionality
 
 ---
