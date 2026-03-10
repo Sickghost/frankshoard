@@ -39,7 +39,7 @@ fn run() -> Result<(), FranksHoardError>{
 
     match cli.command {
         Commands::Init => init(),
-        other => Err(FranksHoardError::NotImplementedError(format!("{:?}", other))),
+        other => Err(FranksHoardError::NotImplemented(format!("{:?}", other))),
     }
 }
 

@@ -10,8 +10,8 @@ pub enum FranksHoardError {
     HomeDirectoryNotFound,
     UrlParseError(String),
     BinarySerdeError(postcard::Error),
-    IllegalStateError(String),
-    NotImplementedError(String),
+    IllegalState(String),
+    NotImplemented(String),
 }
 
 impl std::fmt::Display for FranksHoardError {
@@ -27,8 +27,8 @@ impl std::fmt::Display for FranksHoardError {
             FranksHoardError::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
             FranksHoardError::UrlParseError(str) => write!(f, "Url Parse Error: {}", str),
             FranksHoardError::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
-            FranksHoardError::IllegalStateError(str) => write!(f, "Illegal state: {}", str),
-            FranksHoardError::NotImplementedError(str) => write!(f, "Error, feature not yet implemented: {}", str),
+            FranksHoardError::IllegalState(str) => write!(f, "Illegal state: {}", str),
+            FranksHoardError::NotImplemented(str) => write!(f, "Error, feature not yet implemented: {}", str),
         }
     }
 }
