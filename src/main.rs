@@ -1,7 +1,9 @@
 use clap::{Parser,Subcommand};
-use dialoguer::{Confirm, Input, Password};
+use dialoguer::{Password};
+use zeroize::Zeroizing;
+use std::path::PathBuf;
 
-use frankshoard::{FranksHoard, FranksHoardError};
+use frankshoard::{LockedHoard, UnlockedHoard, FranksHoardError};
 
 #[derive(Parser)]
 #[command(name = "frankshoard")]
@@ -33,21 +35,18 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), FranksHoardError>{
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-
     match cli.command {
-        Commands::Init => init(),
-        other => Err(FranksHoardError::NotImplemented(format!("{:?}", other))),
+        Commands::Init => init(cli.config),
+        other => Err(Box::new(FranksHoardError::NotImplemented(format!("{:?}", other)))),
     }
 }
 
-fn init(hoard: &mut FranksHoard) -> Result<(), FranksHoardError> {
-    if hoard.is_initialize()? {
-        println!("Vault is already initialized.");
-        return Ok(());
-    }
+fn init(path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    let locked_hoard = LockedHoard::new_hoard(path)?;
+
     // Ask for password
     let password = Zeroizing::new(
         Password::new()
@@ -55,6 +54,9 @@ fn init(hoard: &mut FranksHoard) -> Result<(), FranksHoardError> {
             .with_confirmation("Confirm password", "Passwords do not match")
             .interact()?
     );
+
+    let unlocked_hoard = locked_hoard.unlock(password)?;
+    unlocked_hoard.lock(true)?;
 
     Ok(())
 }

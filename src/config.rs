@@ -46,7 +46,7 @@ pub struct Config {
 
 impl Config {
     pub fn vault_file(&self) -> &PathBuf {
-        self.vault_file()
+        &self.vault_file
     }
 
     pub fn argon2(&self) -> &Argon2Conf {
@@ -90,6 +90,9 @@ impl Config {
     pub fn save_file(&self, path: &Path) -> Result<(), FranksHoardError> {
         let toml_str = toml::to_string(&self)?;
 
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         fs::write(path, toml_str)?;
         Ok(())
     }

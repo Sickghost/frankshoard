@@ -56,6 +56,7 @@ impl LockedHoard {
 
         let config;
         if path.try_exists()? {
+            println!("loading config");
             config = Config::from_path(&path)?;
         } else {
             config = Config::from_default()?;
@@ -64,8 +65,8 @@ impl LockedHoard {
         Ok(config)
     }
 
-    pub fn unlock(self, password: &Zeroizing<String>) -> Result<UnlockedHoard, FranksHoardError> {
-        UnlockedHoard::unlock(self, password)
+    pub fn unlock(self, password: Zeroizing<String>) -> Result<UnlockedHoard, FranksHoardError> {
+        UnlockedHoard::unlock(self, &password)
     }
 
     pub fn change_password(&mut self) -> Result<(), FranksHoardError> {
@@ -97,9 +98,8 @@ impl UnlockedHoard {
         Ok(franks_hoard)
     }
 
-
     pub fn lock(mut self, save: bool) -> Result<LockedHoard, FranksHoardError>{
-        self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key);
+        self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         if save {
             self.vault_file.save(self.config.vault_file())?;
         }
@@ -110,16 +110,15 @@ impl UnlockedHoard {
         })
     }
 
-    pub fn get_entries(&self) {
-        // TODO
+    pub fn get_entries(&self) -> Result<&[Entry], FranksHoardError> {
+        Err(FranksHoardError::NotImplemented(format!("method: get_entries")))
     }
 
     pub fn get_entry(&self, uuid: Uuid) -> Result<Entry, FranksHoardError> {
-        Err(FranksHoardError::VaultNotFound)
+        Err(FranksHoardError::NotImplemented(format!("method: get_entry")))
     }
 
     pub fn delete_entry(&mut self, uuid: Uuid) -> Result<(), FranksHoardError> {
-        // TODO
-        Ok(())
+        Err(FranksHoardError::NotImplemented(format!("method: delete_entry")))
     }
 }

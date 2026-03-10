@@ -215,6 +215,11 @@ impl VaultFile {
         // We could do complicated stuff (seek past the salt, truncate and write new nonce and ciphertext,
         // have special code for new file...) to not have to rewrite the salt but honestly, it's only 32 bytes
         // so we just zap the whole file each time.
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
         let tmp_path = path.with_extension("tmp");
 
         let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
