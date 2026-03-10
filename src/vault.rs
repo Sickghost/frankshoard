@@ -127,17 +127,19 @@ pub struct DecryptedVault {
 }
 
 impl DecryptedVault {
-
     pub fn new() -> Self {
         DecryptedVault { entries: Vec::new() }
     }
 
     pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, FranksHoardError> {
-        let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
-        let vault: DecryptedVault = from_bytes(&bytes)?;
-        Ok(vault)
+        if ciphertext.is_empty() {
+            Ok(DecryptedVault { entries: Vec::new() })
+        } else {
+            let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
+            let vault: DecryptedVault = from_bytes(&bytes)?;
+            Ok(vault)
+        }
     }
-
 
     // Public method to add entries
     pub fn add_entry(&mut self, item: Entry) {
@@ -171,63 +173,65 @@ impl VaultFile {
     pub fn build_new_vault(path: &Path) -> Result<Self, FranksHoardError> {
         if path.try_exists()? {
             return Err(FranksHoardError::VaultAlreadyExists);
-        } else {
-            let mut salt = [0u8; 32];
-            crypto::fill_salt(&mut salt);
-
-            let vault_file = VaultFile {
-                salt,
-                nonce: [0u8; 12],  // we don't care, this nonce will never be used
-                ciphertext: Vec::new(),
-            };
-            Ok(vault_file)
         }
+        let mut salt = [0u8; 32];
+        crypto::fill_salt(&mut salt);
+        Ok(VaultFile {
+            salt,
+            nonce: [0u8; 12],  // 0s because will never be used
+            ciphertext: Vec::new(),
+        })
     }
 
     pub fn from_path(path: &Path) -> Result<Self, FranksHoardError> {
-        if path.try_exists()? {
-            let bytes = fs::read(path)?;
-            let mut cursor = Cursor::new(bytes);
-
-            let mut salt = [0u8; 32];
-            if let Err(e) = cursor.read_exact(&mut salt) {
-                return Err(FranksHoardError::MalformedVault(e));
-            }
-            let mut nonce = [0u8; 12];
-            if let Err(e) = cursor.read_exact(&mut nonce) {
-                return Err(FranksHoardError::MalformedVault(e));
-            }
-            let mut ciphertext = Vec::new();
-            if let Err(e) = cursor.read_to_end(&mut ciphertext) {
-                return Err(FranksHoardError::MalformedVault(e));
-            }
-
-            let vault_file = VaultFile {
-                salt,
-                nonce,
-                ciphertext,
-            };
-            Ok(vault_file)
-        } else {
-            Err(FranksHoardError::VaultNotFound)
+        if !path.try_exists()? {
+            return Err(FranksHoardError::VaultNotFound);
         }
+
+        let bytes = fs::read(path)?;
+        let mut cursor = Cursor::new(bytes);
+
+        let mut salt = [0u8; 32];
+        if let Err(e) = cursor.read_exact(&mut salt) {
+            return Err(FranksHoardError::MalformedVault(e));
+        }
+        let mut nonce = [0u8; 12];
+        if let Err(e) = cursor.read_exact(&mut nonce) {
+            return Err(FranksHoardError::MalformedVault(e));
+        }
+        let mut ciphertext = Vec::new();
+        if let Err(e) = cursor.read_to_end(&mut ciphertext) {
+            return Err(FranksHoardError::MalformedVault(e));
+        }
+
+        Ok(VaultFile {
+            salt,
+            nonce,
+            ciphertext,
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), FranksHoardError> {
         // We could do complicated stuff (seek past the salt, truncate and write new nonce and ciphertext,
         // have special code for new file...) to not have to rewrite the salt but honestly, it's only 32 bytes
         // so we just zap the whole file each time.
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(path)?;
+        let tmp_path = path.with_extension("tmp");
+
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
         file.write_all(&self.salt)?;
         file.write_all(&self.nonce)?;
         file.write_all(&self.ciphertext)?;
-        file.flush()?;
+        file.sync_all()?;
+        drop(file);
+
+        fs::rename(&tmp_path, path)?;  // TODO: only works on unix-like.  Probnaly should use tempfile crate or something
         Ok(())
     }
 
-    pub fn update_cyphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), FranksHoardError> {
+    pub fn update_ciphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), FranksHoardError> {
         let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
-        self.ciphertext = crypto::encrypt_bytes(key, &mut self.nonce, &clear_data)?;
+        crypto::fill_nonce(&mut self.nonce);
+        self.ciphertext = crypto::encrypt_bytes(key, &self.nonce, &clear_data)?;
         Ok(())
     }
 

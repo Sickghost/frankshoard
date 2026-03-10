@@ -40,12 +40,16 @@ pub fn fill_salt(salt: &mut [u8; 32]) {
     OsRng.fill_bytes(salt);
 }
 
-pub fn encrypt_bytes(master_key: &MasterKey, nonce_bytes: &mut [u8; 12], plaintext: &Zeroizing<Vec<u8>>) -> Result<Vec<u8>, FranksHoardError> {
+pub fn fill_nonce(nonce_bytes: &mut [u8; 12]) {
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+    nonce_bytes.copy_from_slice(nonce.as_slice());
+}
+
+pub fn encrypt_bytes(master_key: &MasterKey, nonce_bytes: &[u8; 12], plaintext: &Zeroizing<Vec<u8>>) -> Result<Vec<u8>, FranksHoardError> {
     let key = Key::<Aes256Gcm>::from_slice(master_key.as_bytes());
     let cipher = Aes256Gcm::new(&key);
 
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
-    nonce_bytes.copy_from_slice(nonce.as_slice());
+    let nonce = Nonce::from_slice(nonce_bytes);
     let ciphertext = cipher.encrypt(&nonce, plaintext.as_slice())?;
     Ok(ciphertext)
 }

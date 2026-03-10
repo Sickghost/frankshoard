@@ -5,26 +5,30 @@ pub enum FranksHoardError {
     VaultAlreadyExists,
     VaultNotFound,
     MalformedVault(std::io::Error),
-    InvalidMasterPassword,
+    MasterPasswordError(String),
     TomlError(String),
     HomeDirectoryNotFound,
     UrlParseError(String),
     BinarySerdeError(postcard::Error),
+    IllegalStateError(String),
+    NotImplementedError(String),
 }
 
 impl std::fmt::Display for FranksHoardError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             FranksHoardError::Io(e) => write!(f, "IO error: {}", e),
-            FranksHoardError::Encryption(e) => write!(f, "Encryption error: {}", e),
+            FranksHoardError::Encryption(str) => write!(f, "Encryption error: {}", str),
             FranksHoardError::VaultAlreadyExists => write!(f, "Vault already exists"),
             FranksHoardError::VaultNotFound => write!(f, "Vault not found"),
             FranksHoardError::MalformedVault(e) => write!(f, "Malformed vault file: {}", e),
-            FranksHoardError::InvalidMasterPassword => write!(f, "Invalid master password"),
-            FranksHoardError::TomlError(e) => write!(f, "Toml Error : {}", e),
+            FranksHoardError::MasterPasswordError(str) => write!(f, "Master password error: {}", str),
+            FranksHoardError::TomlError(str) => write!(f, "Toml Error : {}", str),
             FranksHoardError::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
-            FranksHoardError::UrlParseError(e) => write!(f, "Url Parse Error: {}", e),
+            FranksHoardError::UrlParseError(str) => write!(f, "Url Parse Error: {}", str),
             FranksHoardError::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
+            FranksHoardError::IllegalStateError(str) => write!(f, "Illegal state: {}", str),
+            FranksHoardError::NotImplementedError(str) => write!(f, "Error, feature not yet implemented: {}", str),
         }
     }
 }
