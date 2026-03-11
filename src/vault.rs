@@ -1,12 +1,13 @@
 use std::fs;
 use std::fs::OpenOptions;
+use std::fmt;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use postcard::{to_allocvec, from_bytes};
 use serde::{Serialize, Deserialize};
 use url::Url;
 use uuid::Uuid;
-use zeroize::{ZeroizeOnDrop, Zeroizing};
+use zeroize::{ZeroizeOnDrop, Zeroizing, Zeroize};
 
 use crate::error::FranksHoardError;
 use crate::crypto::{self, MasterKey};
@@ -29,6 +30,16 @@ impl Entry {
     }
 }
 
+impl fmt::Display for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Entry::Site(s) => write!(f, "{}", s),
+            Entry::Note(n) => write!(f, "{}", n),
+            Entry::BasicPassword(b) => write!(f, "{}", b),
+        }
+    }
+}
+
 pub trait FromEntry {
     fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self>;
 }
@@ -37,15 +48,16 @@ pub trait FromEntry {
 pub struct BasicPasswordEntry {
     #[zeroize(skip)]
     id: Uuid,
-    #[zeroize(skip)]
-    pub username: String,
-    pub password: String,
+    entry_name: String,
+    username: String,
+    password: String,
 }
 
 impl BasicPasswordEntry {
-    pub fn new(username: String, password: String) -> Self {
+    pub fn new(entry_name: String, username: String, password: String) -> Self {
         BasicPasswordEntry {
             id: Uuid::new_v4(),
+            entry_name,
             username,
             password,
         }
@@ -53,6 +65,41 @@ impl BasicPasswordEntry {
 
     pub fn id(&self) -> Uuid {
         self.id
+    }
+
+    pub fn entry_name(&self) -> &str {
+        &self.entry_name
+    }
+
+    pub fn set_entry_name(&mut self, new_entry_name: String) {
+        self.entry_name.zeroize();
+        self.entry_name = new_entry_name;
+    }
+
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub fn set_username(&mut self, new_username: String) {
+        self.username.zeroize();
+        self.username = new_username;
+    }
+
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn set_password(&mut self, new_password: String) {
+        self.password.zeroize();
+        self.password = new_password;
+    }
+}
+
+impl fmt::Display for BasicPasswordEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Password Entry: [{}]", self.id())?;
+        writeln!(f, "Entry Name: {}", self.entry_name())?;
+        write!(f, "Username: {}", self.username())
     }
 }
 
@@ -66,17 +113,19 @@ impl FromEntry for BasicPasswordEntry {
 pub struct SiteEntry {
     #[zeroize(skip)]
     id: Uuid,
+    entry_name: String,
     #[zeroize(skip)]
-    pub url: Url,
-    pub username: String,
-    pub password: String,
-    pub note: Option<String>,
+    url: Url,
+    username: String,
+    password: String,
+    note: Option<String>,
 }
 
 impl SiteEntry {
-    pub fn new(url: Url, username: String, password: String, note: Option<String>) -> Self {
+    pub fn new(entry_name: String, url: Url, username: String, password: String, note: Option<String>) -> Self {
         SiteEntry {
             id: Uuid::new_v4(),
+            entry_name,
             url,
             username,
             password,
@@ -86,6 +135,59 @@ impl SiteEntry {
 
     pub fn id(&self) -> Uuid {
         self.id
+    }
+
+    pub fn entry_name(&self) -> &str {
+        &self.entry_name
+    }
+
+    pub fn set_entry_name(&mut self, new_entry_name: String) {
+        self.entry_name.zeroize();
+        self.entry_name = new_entry_name;
+    }
+
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    pub fn set_url(&mut self, new_url: Url) {
+        self.url = new_url;
+    }
+
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub fn set_username(&mut self, new_username: String) {
+        self.username.zeroize();
+        self.username = new_username;
+    }
+
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn set_password(&mut self, new_password: String) {
+        self.password.zeroize();
+        self.password = new_password;
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+
+    pub fn set_note(&mut self, new_note: Option<String>) {
+        self.note.zeroize();
+        self.note = new_note;
+    }
+}
+
+impl fmt::Display for SiteEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Site Entry: [{}]", self.id())?;
+        writeln!(f, "Entry Name: {}", self.entry_name())?;
+        write!(f, "Url: {}", self.url())?;
+        write!(f, "Username: {}", self.username())
     }
 }
 
@@ -99,19 +201,45 @@ impl FromEntry for SiteEntry {
 pub struct NoteEntry {
     #[zeroize(skip)]
     id: Uuid,
-    pub note: String,
+    entry_name: String,
+    note: String,
 }
 
 impl NoteEntry {
-    pub fn new(note: String) -> Self {
+    pub fn new(entry_name: String, note: String) -> Self {
         NoteEntry {
             id: Uuid::new_v4(),
+            entry_name,
             note,
         }
     }
 
     pub fn id(&self) -> Uuid {
         self.id
+    }
+
+    pub fn entry_name(&self) -> &str {
+        &self.entry_name
+    }
+
+    pub fn set_entry_name(&mut self, new_entry_name: String) {
+        self.entry_name.zeroize();
+        self.entry_name = new_entry_name;
+    }
+
+    pub fn note(&self) -> &str {
+        &self.note
+    }
+
+    pub fn set_note(&mut self, new_note: String) {
+        self.note.zeroize();
+        self.note = new_note;
+    }
+}
+
+impl fmt::Display for NoteEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Note Entry: [{}]", self.id())
     }
 }
 
@@ -141,14 +269,25 @@ impl DecryptedVault {
         }
     }
 
-    // Public method to add entries
-    pub fn add_entry(&mut self, item: Entry) {
+    pub fn add_entry(&mut self, item: Entry) -> Result<(), FranksHoardError>{
+        if self.entries.iter().any(|e| e.id() == item.id()) {
+            return Err(FranksHoardError::EntryAlreadyExists);
+        }
         self.entries.push(item);
+        Ok(())
     }
 
-    pub fn remove_entry(&mut self, id_to_remove: Uuid) {
+    pub fn get_entry(&self, id: Uuid) -> Option<&Entry>{
+        self.entries.iter().find(|e| e.id() == id)
+    }
+
+    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), FranksHoardError>{
         if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
             self.entries.swap_remove(index);
+            Ok(())
+        }
+        else {
+            Err(FranksHoardError::EntryNotFound)
         }
     }
 
@@ -212,10 +351,6 @@ impl VaultFile {
     }
 
     pub fn save(&self, path: &Path) -> Result<(), FranksHoardError> {
-        // We could do complicated stuff (seek past the salt, truncate and write new nonce and ciphertext,
-        // have special code for new file...) to not have to rewrite the salt but honestly, it's only 32 bytes
-        // so we just zap the whole file each time.
-
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }

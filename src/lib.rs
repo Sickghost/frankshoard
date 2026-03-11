@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 pub use crate::error::FranksHoardError;
 pub use crate::vault::{Entry, SiteEntry, NoteEntry, BasicPasswordEntry};
 
-use crate::vault::{VaultFile, DecryptedVault};
+use crate::vault::{VaultFile, DecryptedVault, FromEntry};
 use crate::config::Config;
 use crate::crypto::MasterKey;
 
@@ -56,7 +56,6 @@ impl LockedHoard {
 
         let config;
         if path.try_exists()? {
-            println!("loading config");
             config = Config::from_path(&path)?;
         } else {
             config = Config::from_default()?;
@@ -69,9 +68,14 @@ impl LockedHoard {
         UnlockedHoard::unlock(self, &password)
     }
 
-    pub fn change_password(&mut self) -> Result<(), FranksHoardError> {
-        // TODO
-        Ok(())
+    // TODO: Need to refactor this to allow to safely change the salt when changing the password.  This should be handled internally
+    // in VaultFile to minimize errors
+    pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), FranksHoardError> {
+        let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
+        let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
+
+        let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, self.vault_file.nonce(), self.vault_file.ciphertext())?;
+        self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)
     }
 }
 
@@ -85,7 +89,7 @@ pub struct UnlockedHoard {
 
 impl UnlockedHoard {
 
-    pub fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, FranksHoardError> {
+    pub(crate) fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, FranksHoardError> {
         let master_key = MasterKey::from_password(password, &locked_hoard.vault_file.salt(), &locked_hoard.config)?;
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, &locked_hoard.vault_file.nonce(), &locked_hoard.vault_file.ciphertext())?;
 
@@ -110,15 +114,23 @@ impl UnlockedHoard {
         })
     }
 
-    pub fn get_entries(&self) -> Result<&[Entry], FranksHoardError> {
-        Err(FranksHoardError::NotImplemented(format!("method: get_entries")))
+    pub fn add_entry(&mut self, entry: Entry) -> Result<(), FranksHoardError> {
+        self.decrypted_vault.add_entry(entry)
     }
 
-    pub fn get_entry(&self, uuid: Uuid) -> Result<Entry, FranksHoardError> {
-        Err(FranksHoardError::NotImplemented(format!("method: get_entry")))
+    pub fn get_entries(&self) -> &[Entry] {
+        self.decrypted_vault.get_entries()
     }
 
-    pub fn delete_entry(&mut self, uuid: Uuid) -> Result<(), FranksHoardError> {
-        Err(FranksHoardError::NotImplemented(format!("method: delete_entry")))
+    pub fn get_entries_of<'a, T: FromEntry + 'a>(&'a self) -> impl Iterator<Item = &'a T> + 'a {
+        self.decrypted_vault.get_entries_of::<>()
+    }
+
+    pub fn get_entry(&self, uuid: Uuid) -> Option<&Entry> {
+        self.decrypted_vault.get_entry(uuid)
+    }
+
+    pub fn remove_entry(&mut self, uuid: Uuid) -> Result<(), FranksHoardError> {
+        self.decrypted_vault.remove_entry(uuid)
     }
 }

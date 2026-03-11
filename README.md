@@ -62,8 +62,8 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 - [x] Vault storage and entry management
 - [x] Argon2id key derivation
 - [x] AES-256-GCM encryption/decryption
-- [ ] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
-- [ ] CLI interface
+- [x] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
+- [x] CLI interface
 
 Release 1
 

@@ -45,20 +45,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn vault_file(&self) -> &PathBuf {
-        &self.vault_file
-    }
-
-    pub fn argon2(&self) -> &Argon2Conf {
-        &self.argon2
-    }
-
-    pub fn ui(&self) -> &UIConf {
-        &self.ui
-    }
-}
-
-impl Config {
     pub fn from_path(path: &Path) -> Result<Self, FranksHoardError> {
         let config_str = fs::read_to_string(path)?;
         let mut config: Config = toml::from_str(&config_str)?;
@@ -95,6 +81,18 @@ impl Config {
         }
         fs::write(path, toml_str)?;
         Ok(())
+    }
+
+    pub fn vault_file(&self) -> &Path {
+        &self.vault_file
+    }
+
+    pub fn argon2(&self) -> &Argon2Conf {
+        &self.argon2
+    }
+
+    pub fn ui(&self) -> &UIConf {
+        &self.ui
     }
 }
 
