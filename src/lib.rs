@@ -68,13 +68,12 @@ impl LockedHoard {
         UnlockedHoard::unlock(self, &password)
     }
 
-    // TODO: Need to refactor this to allow to safely change the salt when changing the password.  This should be handled internally
-    // in VaultFile to minimize errors
     pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), FranksHoardError> {
         let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
-        let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
-
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, self.vault_file.nonce(), self.vault_file.ciphertext())?;
+
+        self.vault_file.update_salt();
+        let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
         self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)
     }
 }

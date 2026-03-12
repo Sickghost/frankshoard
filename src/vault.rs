@@ -379,6 +379,13 @@ impl VaultFile {
         &self.salt
     }
 
+    /// Make sure you generate a new master_key and use it to update the ciphertext before saving the vault
+    /// or you won't be able to decrypt it anymore.
+    /// This is intended to be used when the password is changed.
+    pub fn update_salt(&mut self) {
+        crypto::fill_salt(&mut self.salt);
+    }
+
     pub fn nonce(&self) -> &[u8; 12] {
         &self.nonce
     }

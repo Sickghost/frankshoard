@@ -67,8 +67,11 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 
 Release 1
 
+- [ ] Add "verbose mode" and remove all none-essential printouts from none verbose mode
 - [ ] Test Suite
-- [ ] Export/backup functionality
+- [ ] Add a GUI
+- [ ] Add Interractive session to cli
+- [ ] Add a threaded timer to manage master_key lifecycle.
 
 ---
 

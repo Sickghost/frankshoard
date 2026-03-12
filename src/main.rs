@@ -174,17 +174,22 @@ fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands) -> Result<(),
         .interact()?;
 
     match entry_type {
-        AddCommands::BasicPassword { entry_name, username } => unlocked_hoard.add_entry(
-            Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password))
-        )?,
-        AddCommands::Site {entry_name, url, username, note} => unlocked_hoard.add_entry(
-            Entry::Site(SiteEntry::new(entry_name, url, username, password, note))
-        )?,
-        AddCommands::Note { entry_name, note } => unlocked_hoard.add_entry(
-            Entry::Note(NoteEntry::new(entry_name, note))
-        )?,
+        AddCommands::BasicPassword { entry_name, username } => {
+            let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password));
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
+        AddCommands::Site {entry_name, url, username, note} => {
+            let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note));
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
+        AddCommands::Note { entry_name, note } => {
+            let entry = Entry::Note(NoteEntry::new(entry_name, note));
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
     }
-
     println!("Saving new entry...");
     unlocked_hoard.lock(true)?;
     println!("Entry saved.");
