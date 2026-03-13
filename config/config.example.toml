@@ -1,0 +1,15 @@
+# This is a sample config file.
+# If you don't want to bother, a default file will be created the first time the program runs.
+# If you want to costumize setting, copy to ~/.config/frankshoard/config.toml
+# and customize values.
+
+vault_file = "~/.frankshoard/vault.db"
+
+# WARNING: Once the vault is created, DO NOT MODIFY argon2, or you won't be able to decrypt your vault
+[argon2]
+memory = 1953000
+iterations = 3
+parallelism = 1
+
+[ui]
+master_pwd_timeout_seconds = 300
