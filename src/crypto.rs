@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 use std::time::Instant;
 
 use crate::config::Config;
-use crate::error::FranksHoardError;
+use crate::error::Error;
 
 
 pub struct MasterKey {
@@ -15,7 +15,7 @@ pub struct MasterKey {
 }
 
 impl MasterKey {
-    pub fn from_password(password: &Zeroizing<String>, salt: &[u8; 32], config: &Config) -> Result<MasterKey, FranksHoardError>{
+    pub fn from_password(password: &Zeroizing<String>, salt: &[u8; 32], config: &Config) -> Result<MasterKey, Error>{
         let argon2 = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
@@ -45,7 +45,7 @@ pub fn fill_nonce(nonce_bytes: &mut [u8; 12]) {
     nonce_bytes.copy_from_slice(nonce.as_slice());
 }
 
-pub fn encrypt_bytes(master_key: &MasterKey, nonce_bytes: &[u8; 12], plaintext: &Zeroizing<Vec<u8>>) -> Result<Vec<u8>, FranksHoardError> {
+pub fn encrypt_bytes(master_key: &MasterKey, nonce_bytes: &[u8; 12], plaintext: &Zeroizing<Vec<u8>>) -> Result<Vec<u8>, Error> {
     let key = Key::<Aes256Gcm>::from_slice(master_key.as_bytes());
     let cipher = Aes256Gcm::new(&key);
 
@@ -54,7 +54,7 @@ pub fn encrypt_bytes(master_key: &MasterKey, nonce_bytes: &[u8; 12], plaintext: 
     Ok(ciphertext)
 }
 
-pub fn decrypt_bytes(master_key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, FranksHoardError> {
+pub fn decrypt_bytes(master_key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
     let key = Key::<Aes256Gcm>::from_slice(master_key.as_bytes());
     let cipher = Aes256Gcm::new(&key);
 

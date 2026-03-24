@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum FranksHoardError {
+pub enum Error {
     Io(std::io::Error),
     Encryption(String),
     VaultAlreadyExists,
@@ -14,69 +14,73 @@ pub enum FranksHoardError {
     BinarySerdeError(postcard::Error),
     IllegalState(String),
     NotImplemented(String),
+    SecretTooLong,
+    CorruptedSecret,
 }
 
-impl std::fmt::Display for FranksHoardError {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            FranksHoardError::Io(e) => write!(f, "IO error: {}", e),
-            FranksHoardError::Encryption(str) => write!(f, "Encryption error: {}", str),
-            FranksHoardError::VaultAlreadyExists => write!(f, "Vault already exists"),
-            FranksHoardError::VaultNotFound => write!(f, "Vault not found"),
-            FranksHoardError::EntryAlreadyExists => write!(f, "Entry already exists in vault"),
-            FranksHoardError::EntryNotFound => write!(f, "Entry not found in vault"),
-            FranksHoardError::MalformedVault(e) => write!(f, "Malformed vault file: {}", e),
-            FranksHoardError::MasterPasswordError(str) => write!(f, "Master password error: {}", str),
-            FranksHoardError::TomlError(str) => write!(f, "Toml Error : {}", str),
-            FranksHoardError::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
-            FranksHoardError::UrlParseError(str) => write!(f, "Url Parse Error: {}", str),
-            FranksHoardError::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
-            FranksHoardError::IllegalState(str) => write!(f, "Illegal state: {}", str),
-            FranksHoardError::NotImplemented(str) => write!(f, "Error, feature not yet implemented: {}", str),
+            Error::Io(e) => write!(f, "IO error: {}", e),
+            Error::Encryption(str) => write!(f, "Encryption error: {}", str),
+            Error::VaultAlreadyExists => write!(f, "Vault already exists"),
+            Error::VaultNotFound => write!(f, "Vault not found"),
+            Error::EntryAlreadyExists => write!(f, "Entry already exists in vault"),
+            Error::EntryNotFound => write!(f, "Entry not found in vault"),
+            Error::MalformedVault(e) => write!(f, "Malformed vault file: {}", e),
+            Error::MasterPasswordError(str) => write!(f, "Master password error: {}", str),
+            Error::TomlError(str) => write!(f, "Toml Error : {}", str),
+            Error::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
+            Error::UrlParseError(str) => write!(f, "Url Parse Error: {}", str),
+            Error::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
+            Error::IllegalState(str) => write!(f, "Illegal state: {}", str),
+            Error::NotImplemented(str) => write!(f, "Error, feature not yet implemented: {}", str),
+            Error::SecretTooLong => write!(f, "Error, the secret you are trying to create is too long."),
+            Error::CorruptedSecret => write!(f, "Error, the secret could not be retrieved."),
         }
     }
 }
 
-impl std::error::Error for FranksHoardError {}
+impl std::error::Error for Error {}
 
-impl From<std::io::Error> for FranksHoardError {
+impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
-        FranksHoardError::Io(e)
+        Error::Io(e)
     }
 }
 
-impl From<aes_gcm::Error> for FranksHoardError {
+impl From<aes_gcm::Error> for Error {
     fn from(e: aes_gcm::Error) -> Self {
-        FranksHoardError::Encryption(e.to_string())
+        Error::Encryption(e.to_string())
     }
 }
 
-impl From<toml::de::Error> for FranksHoardError {
+impl From<toml::de::Error> for Error {
     fn from(e: toml::de::Error) -> Self {
-        FranksHoardError::TomlError(e.to_string())
+        Error::TomlError(e.to_string())
     }
 }
 
-impl From<toml::ser::Error> for FranksHoardError {
+impl From<toml::ser::Error> for Error {
     fn from(e: toml::ser::Error) -> Self {
-        FranksHoardError::TomlError(e.to_string())
+        Error::TomlError(e.to_string())
     }
 }
 
-impl From<url::ParseError> for FranksHoardError {
+impl From<url::ParseError> for Error {
     fn from(e: url::ParseError) -> Self {
-        FranksHoardError::UrlParseError(e.to_string())
+        Error::UrlParseError(e.to_string())
     }
 }
 
-impl From<argon2::Error> for FranksHoardError {
+impl From<argon2::Error> for Error {
     fn from(e: argon2::Error) -> Self {
-        FranksHoardError::Encryption(e.to_string())
+        Error::Encryption(e.to_string())
     }
 }
 
-impl From<postcard::Error> for FranksHoardError {
+impl From<postcard::Error> for Error {
     fn from(e: postcard::Error) -> Self {
-        FranksHoardError::BinarySerdeError(e)
+        Error::BinarySerdeError(e)
     }
 }

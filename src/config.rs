@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::FranksHoardError;
+use crate::error::Error;
 
 #[derive(Deserialize, Serialize)]
 pub struct Argon2Conf {
@@ -45,15 +45,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_path(path: &Path) -> Result<Self, FranksHoardError> {
+    pub fn from_path(path: &Path) -> Result<Self, Error> {
         let config_str = fs::read_to_string(path)?;
         let mut config: Config = toml::from_str(&config_str)?;
         config.vault_file = expand_tilde(&config.vault_file)?;
         Ok(config)
     }
 
-    pub fn from_default() -> Result<Self, FranksHoardError> {
-        let home = home_dir().ok_or(FranksHoardError::HomeDirectoryNotFound)?;
+    pub fn from_default() -> Result<Self, Error> {
+        let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
         let conf = Config {
             vault_file: home.join(".frankshoard/vault.db"),
             argon2: Argon2Conf {
@@ -68,12 +68,12 @@ impl Config {
         Ok(conf)
     }
 
-    pub fn default_config_path() -> Result<PathBuf, FranksHoardError> {
-        let home = home_dir().ok_or(FranksHoardError::HomeDirectoryNotFound)?;
+    pub fn default_config_path() -> Result<PathBuf, Error> {
+        let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
         Ok(home.join(".config/frankshoard/config.toml"))
     }
 
-    pub fn save_file(&self, path: &Path) -> Result<(), FranksHoardError> {
+    pub fn save_file(&self, path: &Path) -> Result<(), Error> {
         let toml_str = toml::to_string(&self)?;
 
         if let Some(parent) = path.parent() {
@@ -96,9 +96,9 @@ impl Config {
     }
 }
 
-fn expand_tilde(path: &Path) -> Result<PathBuf, FranksHoardError> {
+fn expand_tilde(path: &Path) -> Result<PathBuf, Error> {
     if let Ok(stripped) = path.strip_prefix("~") {
-        let home = home_dir().ok_or(FranksHoardError::HomeDirectoryNotFound)?;
+        let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
         return Ok(home.join(stripped));
     }
     Ok(path.to_path_buf())

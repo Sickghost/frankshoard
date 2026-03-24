@@ -7,13 +7,14 @@ use postcard::{to_allocvec, from_bytes};
 use serde::{Serialize, Deserialize};
 use url::Url;
 use uuid::Uuid;
-use zeroize::{ZeroizeOnDrop, Zeroizing, Zeroize};
+use zeroize::{Zeroizing, Zeroize};
 
-use crate::error::FranksHoardError;
+use crate::error::Error;
 use crate::crypto::{self, MasterKey};
+use crate::safebufs::{PasswordBuf, NoteBuf, MAX_PASSWORD_SIZE};
 
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Entry {
     BasicPassword(BasicPasswordEntry),
     Site(SiteEntry),
@@ -44,23 +45,25 @@ pub trait FromEntry {
     fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self>;
 }
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BasicPasswordEntry {
-    #[zeroize(skip)]
     id: Uuid,
-    entry_name: String,
-    username: String,
-    password: String,
+    entry_name: Zeroizing<String>,
+    username: Zeroizing<String>,
+    password: PasswordBuf,
 }
 
 impl BasicPasswordEntry {
-    pub fn new(entry_name: String, username: String, password: String) -> Self {
-        BasicPasswordEntry {
+    pub fn new(entry_name: Zeroizing<String>, username: Zeroizing<String>, password: Zeroizing<String>) -> Result<Self, Error> {
+
+        let pwd_buf = PasswordBuf::new(password)?;
+
+        Ok(BasicPasswordEntry {
             id: Uuid::new_v4(),
             entry_name,
             username,
-            password,
-        }
+            password: pwd_buf,
+        })
     }
 
     pub fn id(&self) -> Uuid {
@@ -71,7 +74,7 @@ impl BasicPasswordEntry {
         &self.entry_name
     }
 
-    pub fn set_entry_name(&mut self, new_entry_name: String) {
+    pub fn set_entry_name(&mut self, new_entry_name: Zeroizing<String>) {
         self.entry_name.zeroize();
         self.entry_name = new_entry_name;
     }
@@ -80,18 +83,19 @@ impl BasicPasswordEntry {
         &self.username
     }
 
-    pub fn set_username(&mut self, new_username: String) {
+    pub fn set_username(&mut self, new_username: Zeroizing<String>) {
         self.username.zeroize();
         self.username = new_username;
     }
 
-    pub fn password(&self) -> &str {
-        &self.password
+    pub fn password(&self) -> Result<Zeroizing<String>, Error> {
+        self.password.as_str()
     }
 
-    pub fn set_password(&mut self, new_password: String) {
+    pub fn set_password(&mut self, new_password: Zeroizing<String>) -> Result<(), Error> {
         self.password.zeroize();
-        self.password = new_password;
+        self.password = PasswordBuf::new(new_password)?;
+        Ok(())
     }
 }
 
@@ -109,28 +113,26 @@ impl FromEntry for BasicPasswordEntry {
     }
 }
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SiteEntry {
-    #[zeroize(skip)]
     id: Uuid,
-    entry_name: String,
-    #[zeroize(skip)]
+    entry_name: Zeroizing<String>,
     url: Url,
-    username: String,
-    password: String,
-    note: Option<String>,
+    username: Zeroizing<String>,
+    password: PasswordBuf,
+    note: Option<NoteBuf>,
 }
 
 impl SiteEntry {
-    pub fn new(entry_name: String, url: Url, username: String, password: String, note: Option<String>) -> Self {
-        SiteEntry {
+    pub fn new(entry_name: Zeroizing<String>, url: Url, username: Zeroizing<String>, password: Zeroizing<String>, note: Option<Zeroizing<String>>) -> Result<Self, Error> {
+        Ok(SiteEntry {
             id: Uuid::new_v4(),
             entry_name,
             url,
             username,
-            password,
-            note,
-        }
+            password: PasswordBuf::new(password)?,
+            note: note.map(NoteBuf::new).transpose()?,
+        })
     }
 
     pub fn id(&self) -> Uuid {
@@ -141,7 +143,7 @@ impl SiteEntry {
         &self.entry_name
     }
 
-    pub fn set_entry_name(&mut self, new_entry_name: String) {
+    pub fn set_entry_name(&mut self, new_entry_name: Zeroizing<String>) {
         self.entry_name.zeroize();
         self.entry_name = new_entry_name;
     }
@@ -158,27 +160,32 @@ impl SiteEntry {
         &self.username
     }
 
-    pub fn set_username(&mut self, new_username: String) {
+    pub fn set_username(&mut self, new_username: Zeroizing<String>) {
         self.username.zeroize();
         self.username = new_username;
     }
 
-    pub fn password(&self) -> &str {
-        &self.password
+    pub fn password(&self) -> Result<Zeroizing<String>, Error> {
+        self.password.as_str()
     }
 
-    pub fn set_password(&mut self, new_password: String) {
+    pub fn set_password(&mut self, new_password: Zeroizing<String>) -> Result<(), Error> {
         self.password.zeroize();
-        self.password = new_password;
+        self.password = PasswordBuf::new(new_password)?;
+        Ok(())
     }
 
-    pub fn note(&self) -> Option<&str> {
-        self.note.as_deref()
+    pub fn note(&self) -> Result<Option<Zeroizing<String>>, Error> {
+        match &self.note {
+            Some(n) => Ok(Some(n.as_str()?)),
+            None => return Ok(None),
+        }
     }
 
-    pub fn set_note(&mut self, new_note: Option<String>) {
+    pub fn set_note(&mut self, new_note: Option<Zeroizing<String>>) -> Result<(), Error> {
         self.note.zeroize();
-        self.note = new_note;
+        self.note = new_note.map(NoteBuf::new).transpose()?;
+        Ok(())
     }
 }
 
@@ -197,21 +204,20 @@ impl FromEntry for SiteEntry {
     }
 }
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NoteEntry {
-    #[zeroize(skip)]
     id: Uuid,
-    entry_name: String,
-    note: String,
+    entry_name: Zeroizing<String>,
+    note: NoteBuf,
 }
 
 impl NoteEntry {
-    pub fn new(entry_name: String, note: String) -> Self {
-        NoteEntry {
+    pub fn new(entry_name: Zeroizing<String>, note: Zeroizing<String>) -> Result<Self, Error> {
+        Ok(NoteEntry {
             id: Uuid::new_v4(),
             entry_name,
-            note,
-        }
+            note: NoteBuf::new(note)?,
+        })
     }
 
     pub fn id(&self) -> Uuid {
@@ -222,18 +228,18 @@ impl NoteEntry {
         &self.entry_name
     }
 
-    pub fn set_entry_name(&mut self, new_entry_name: String) {
+    pub fn set_entry_name(&mut self, new_entry_name: Zeroizing<String>) {
         self.entry_name.zeroize();
         self.entry_name = new_entry_name;
     }
 
-    pub fn note(&self) -> &str {
-        &self.note
+    pub fn note(&self) -> Result<Zeroizing<String>, Error> {
+        self.note.as_str()
     }
 
-    pub fn set_note(&mut self, new_note: String) {
+    pub fn set_note(&mut self, new_note: Zeroizing<String>) -> Result<(), Error> {
         self.note.zeroize();
-        self.note = new_note;
+        Ok(self.note = NoteBuf::new(new_note)?)
     }
 }
 
@@ -249,7 +255,7 @@ impl FromEntry for NoteEntry {
     }
 }
 
-#[derive(ZeroizeOnDrop, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DecryptedVault {
     entries: Vec<Entry>, // data in a Vec are always on the heap, so should be safe to just zero them like that
 }
@@ -259,7 +265,7 @@ impl DecryptedVault {
         DecryptedVault { entries: Vec::new() }
     }
 
-    pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, FranksHoardError> {
+    pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, Error> {
         if ciphertext.is_empty() {
             Ok(DecryptedVault { entries: Vec::new() })
         } else {
@@ -269,9 +275,9 @@ impl DecryptedVault {
         }
     }
 
-    pub fn add_entry(&mut self, item: Entry) -> Result<(), FranksHoardError>{
+    pub fn add_entry(&mut self, item: Entry) -> Result<(), Error>{
         if self.entries.iter().any(|e| e.id() == item.id()) {
-            return Err(FranksHoardError::EntryAlreadyExists);
+            return Err(Error::EntryAlreadyExists);
         }
         self.entries.push(item);
         Ok(())
@@ -281,13 +287,13 @@ impl DecryptedVault {
         self.entries.iter().find(|e| e.id() == id)
     }
 
-    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), FranksHoardError>{
+    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), Error>{
         if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
             self.entries.swap_remove(index);
             Ok(())
         }
         else {
-            Err(FranksHoardError::EntryNotFound)
+            Err(Error::EntryNotFound)
         }
     }
 
@@ -309,22 +315,24 @@ pub struct VaultFile {
 }
 
 impl VaultFile {
-    pub fn build_new_vault(path: &Path) -> Result<Self, FranksHoardError> {
+    pub fn build_new_vault(path: &Path) -> Result<Self, Error> {
         if path.try_exists()? {
-            return Err(FranksHoardError::VaultAlreadyExists);
+            return Err(Error::VaultAlreadyExists);
         }
         let mut salt = [0u8; 32];
         crypto::fill_salt(&mut salt);
+        let mut nonce = [0u8; 12];
+        crypto::fill_nonce(&mut nonce);
         Ok(VaultFile {
             salt,
-            nonce: [0u8; 12],  // 0s because will never be used
+            nonce,  // Sure, never actually used, but safer anyways and more future proof than not initializing
             ciphertext: Vec::new(),
         })
     }
 
-    pub fn from_path(path: &Path) -> Result<Self, FranksHoardError> {
+    pub fn from_path(path: &Path) -> Result<Self, Error> {
         if !path.try_exists()? {
-            return Err(FranksHoardError::VaultNotFound);
+            return Err(Error::VaultNotFound);
         }
 
         let bytes = fs::read(path)?;
@@ -332,15 +340,15 @@ impl VaultFile {
 
         let mut salt = [0u8; 32];
         if let Err(e) = cursor.read_exact(&mut salt) {
-            return Err(FranksHoardError::MalformedVault(e));
+            return Err(Error::MalformedVault(e));
         }
         let mut nonce = [0u8; 12];
         if let Err(e) = cursor.read_exact(&mut nonce) {
-            return Err(FranksHoardError::MalformedVault(e));
+            return Err(Error::MalformedVault(e));
         }
         let mut ciphertext = Vec::new();
         if let Err(e) = cursor.read_to_end(&mut ciphertext) {
-            return Err(FranksHoardError::MalformedVault(e));
+            return Err(Error::MalformedVault(e));
         }
 
         Ok(VaultFile {
@@ -350,7 +358,7 @@ impl VaultFile {
         })
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), FranksHoardError> {
+    pub fn save(&self, path: &Path) -> Result<(), Error> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -368,7 +376,7 @@ impl VaultFile {
         Ok(())
     }
 
-    pub fn update_ciphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), FranksHoardError> {
+    pub fn update_ciphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), Error> {
         let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
         crypto::fill_nonce(&mut self.nonce);
         self.ciphertext = crypto::encrypt_bytes(key, &self.nonce, &clear_data)?;

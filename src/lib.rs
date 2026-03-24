@@ -2,12 +2,13 @@ mod config;
 mod error;
 mod vault;
 mod crypto;
+mod safebufs;
 
 use std::path::PathBuf;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-pub use crate::error::FranksHoardError;
+pub use crate::error::Error;
 pub use crate::vault::{Entry, SiteEntry, NoteEntry, BasicPasswordEntry};
 
 use crate::vault::{VaultFile, DecryptedVault, FromEntry};
@@ -20,11 +21,11 @@ pub struct LockedHoard {
 }
 
 impl LockedHoard {
-    pub fn from_path(config_path: Option<PathBuf>) -> Result<Self, FranksHoardError> {
+    pub fn from_path(config_path: Option<PathBuf>) -> Result<Self, Error> {
         let config = LockedHoard::build_config(config_path)?;
 
         if !config.vault_file().try_exists()? {
-            return Err(FranksHoardError::VaultNotFound);
+            return Err(Error::VaultNotFound);
         }
         let vault_file = VaultFile::from_path(config.vault_file())?;
 
@@ -34,11 +35,11 @@ impl LockedHoard {
         })
     }
 
-    pub fn new_hoard(config_path: Option<PathBuf>) -> Result<Self, FranksHoardError> {
+    pub fn new_hoard(config_path: Option<PathBuf>) -> Result<Self, Error> {
         let config = LockedHoard::build_config(config_path)?;
 
         if config.vault_file().try_exists()? {
-            return Err(FranksHoardError::VaultAlreadyExists);
+            return Err(Error::VaultAlreadyExists);
         }
 
         let vault_file = VaultFile::build_new_vault(config.vault_file())?;
@@ -48,7 +49,7 @@ impl LockedHoard {
         })
     }
 
-    fn build_config(config_path: Option<PathBuf>) -> Result<Config, FranksHoardError> {
+    fn build_config(config_path: Option<PathBuf>) -> Result<Config, Error> {
         let path = match config_path {
             Some(p) => p,
             None => Config::default_config_path()?,
@@ -64,11 +65,11 @@ impl LockedHoard {
         Ok(config)
     }
 
-    pub fn unlock(self, password: Zeroizing<String>) -> Result<UnlockedHoard, FranksHoardError> {
+    pub fn unlock(self, password: Zeroizing<String>) -> Result<UnlockedHoard, Error> {
         UnlockedHoard::unlock(self, &password)
     }
 
-    pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), FranksHoardError> {
+    pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), Error> {
         let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, self.vault_file.nonce(), self.vault_file.ciphertext())?;
 
@@ -88,7 +89,7 @@ pub struct UnlockedHoard {
 
 impl UnlockedHoard {
 
-    pub(crate) fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, FranksHoardError> {
+    pub(crate) fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
         let master_key = MasterKey::from_password(password, &locked_hoard.vault_file.salt(), &locked_hoard.config)?;
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, &locked_hoard.vault_file.nonce(), &locked_hoard.vault_file.ciphertext())?;
 
@@ -101,7 +102,7 @@ impl UnlockedHoard {
         Ok(franks_hoard)
     }
 
-    pub fn lock(mut self, save: bool) -> Result<LockedHoard, FranksHoardError>{
+    pub fn lock(mut self, save: bool) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         if save {
             self.vault_file.save(self.config.vault_file())?;
@@ -113,7 +114,7 @@ impl UnlockedHoard {
         })
     }
 
-    pub fn add_entry(&mut self, entry: Entry) -> Result<(), FranksHoardError> {
+    pub fn add_entry(&mut self, entry: Entry) -> Result<(), Error> {
         self.decrypted_vault.add_entry(entry)
     }
 
@@ -129,7 +130,7 @@ impl UnlockedHoard {
         self.decrypted_vault.get_entry(uuid)
     }
 
-    pub fn remove_entry(&mut self, uuid: Uuid) -> Result<(), FranksHoardError> {
+    pub fn remove_entry(&mut self, uuid: Uuid) -> Result<(), Error> {
         self.decrypted_vault.remove_entry(uuid)
     }
 }

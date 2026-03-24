@@ -57,25 +57,25 @@ enum Commands {
 enum AddCommands {
     BasicPassword {
         #[arg(long)]
-        entry_name: String,
+        entry_name: Zeroizing<String>,
         #[arg(long)]
-        username: String,
+        username: Zeroizing<String>,
     },
     Site {
         #[arg(long)]
-        entry_name: String,
+        entry_name: Zeroizing<String>,
         #[arg(long)]
         url: Url,
         #[arg(long)]
-        username: String,
+        username: Zeroizing<String>,
         #[arg(long)]
-        note: Option<String>,
+        note: Option<Zeroizing<String>>,
     },
     Note {
         #[arg(long)]
-        entry_name: String,
+        entry_name: Zeroizing<String>,
         #[arg(long)]
-        note: String,
+        note: Zeroizing<String>,
     },
 }
 
@@ -168,24 +168,24 @@ fn change_master_password(mut locked_hoard: LockedHoard) -> Result<(), Box<dyn s
 
 fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands) -> Result<(), Box<dyn std::error::Error>> {
     // Ask for password
-    let password = Password::new()
+    let password = Zeroizing::new(Password::new()
         .with_prompt("Please enter password for new entry")
         .with_confirmation("Confirm password", "Passwords do not match")
-        .interact()?;
+        .interact()?);
 
     match entry_type {
         AddCommands::BasicPassword { entry_name, username } => {
-            let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password));
+            let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
         },
         AddCommands::Site {entry_name, url, username, note} => {
-            let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note));
+            let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
         },
         AddCommands::Note { entry_name, note } => {
-            let entry = Entry::Note(NoteEntry::new(entry_name, note));
+            let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
         },
@@ -260,8 +260,8 @@ fn entry_username(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<d
 fn entry_password(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(entry) = unlocked_hoard.get_entry(uuid) {
         match entry {
-            Entry::BasicPassword(password) => println!("{}", password.password()),
-            Entry::Site(site) => println!("{}", site.password()),
+            Entry::BasicPassword(password) => println!("{}", *password.password()?),
+            Entry::Site(site) => println!("{}", *site.password()?),
             Entry::Note(_) => return Err("Command not supported for entry type".into()),
         }
     }
@@ -273,8 +273,13 @@ fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn s
     if let Some(entry) = unlocked_hoard.get_entry(uuid) {
         match entry {
             Entry::BasicPassword(_) => return Err("Command not supported for entry type".into()),
-            Entry::Site(site) => println!("{}", site.note().unwrap_or("No note")),
-            Entry::Note(note) => println!("{}", note.note()),
+            Entry::Site(site) => {
+                match site.note()? {
+                    Some(n) => println!("{}", *n),
+                    None => println!("No note"),
+                }
+            },
+            Entry::Note(note) => println!("{}", *note.note()?),
         }
     }
     unlocked_hoard.lock(false)?;
