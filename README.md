@@ -92,11 +92,11 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 
 Release 1
 
-- [ ] Add "verbose mode" and remove all none-essential printouts from none verbose mode
 - [ ] Test Suite
-- [ ] Add a GUI
-- [ ] Add Interractive session to cli
-- [ ] Add a threaded timer to manage master_key lifecycle.
+- [ ] Cleanup error handling (thiserror?)
+- [ ] Cleanup IO.  Add "verbose mode", remove all none-essential printouts, add logging
+- [ ] Add a TUI (ratatui)
+- [ ] Add a threaded timer to manage master_key lifecycle. (tokio)
 
 ---
 
