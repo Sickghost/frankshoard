@@ -2,8 +2,6 @@
 
 A secure, offline password vault written in Rust.
 
-**Status:** Work in progress — check develop branch for updates.  Won't merge into main until I have a minimally working version.
-
 ---
 
 ## About
@@ -13,6 +11,33 @@ A secure, offline password vault written in Rust.
 The name is a portmanteau of *Frank* (the author) and *hoard* — a personal stash of secrets, kept offline and under your control.
 
 ---
+
+## Building
+
+This has only been test on MacOS Sequoia so far. 
+
+```bash
+git clone https://github.com/Sickghost/frankshoard
+cd frankshoard
+cargo build
+```
+
+Requires Rust stable (1.70+).
+
+---
+
+## Usage
+
+Assuming the binary is in your path, invoke help on it.
+
+```bash
+frankshoard --help
+```
+
+Note that by default it will look for a config file in `~/.config/frankshoard`.  You can provide a path to the config file via the cli.
+If no configuration file are present, a default one is created.  The default setting uses just under 2 GiB (1953000 KiB) of memory to derive the key.  Even on a good computer this can take quite some time so you may want to change the default to something more reasonable.
+
+See `config/config.example.toml` to create and customize your own.
 
 ## Security Design
 
@@ -75,17 +100,6 @@ Release 1
 
 ---
 
-## Building
-
-```bash
-git clone https://github.com/Sickghost/frankshoard
-cd frankshoard
-cargo build
-```
-
-Requires Rust stable (1.70+).
-
----
 
 ## License
 
