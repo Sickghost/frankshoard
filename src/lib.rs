@@ -2,7 +2,7 @@ mod config;
 mod error;
 mod vault;
 mod crypto;
-mod safebufs;
+mod secretbuf;
 
 use std::path::PathBuf;
 use uuid::Uuid;

@@ -11,7 +11,7 @@ use zeroize::{Zeroizing, Zeroize};
 
 use crate::error::Error;
 use crate::crypto::{self, MasterKey};
-use crate::safebufs::{PasswordBuf, NoteBuf, MAX_PASSWORD_SIZE};
+use crate::secretbuf::{SecretBuf};
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -50,13 +50,13 @@ pub struct BasicPasswordEntry {
     id: Uuid,
     entry_name: Zeroizing<String>,
     username: Zeroizing<String>,
-    password: PasswordBuf,
+    password: SecretBuf,
 }
 
 impl BasicPasswordEntry {
     pub fn new(entry_name: Zeroizing<String>, username: Zeroizing<String>, password: Zeroizing<String>) -> Result<Self, Error> {
 
-        let pwd_buf = PasswordBuf::new(password)?;
+        let pwd_buf = SecretBuf::new(password)?;
 
         Ok(BasicPasswordEntry {
             id: Uuid::new_v4(),
@@ -94,7 +94,7 @@ impl BasicPasswordEntry {
 
     pub fn set_password(&mut self, new_password: Zeroizing<String>) -> Result<(), Error> {
         self.password.zeroize();
-        self.password = PasswordBuf::new(new_password)?;
+        self.password = SecretBuf::new(new_password)?;
         Ok(())
     }
 }
@@ -119,8 +119,8 @@ pub struct SiteEntry {
     entry_name: Zeroizing<String>,
     url: Url,
     username: Zeroizing<String>,
-    password: PasswordBuf,
-    note: Option<NoteBuf>,
+    password: SecretBuf,
+    note: Option<SecretBuf>,
 }
 
 impl SiteEntry {
@@ -130,8 +130,8 @@ impl SiteEntry {
             entry_name,
             url,
             username,
-            password: PasswordBuf::new(password)?,
-            note: note.map(NoteBuf::new).transpose()?,
+            password: SecretBuf::new(password)?,
+            note: note.map(SecretBuf::new).transpose()?,
         })
     }
 
@@ -171,7 +171,7 @@ impl SiteEntry {
 
     pub fn set_password(&mut self, new_password: Zeroizing<String>) -> Result<(), Error> {
         self.password.zeroize();
-        self.password = PasswordBuf::new(new_password)?;
+        self.password = SecretBuf::new(new_password)?;
         Ok(())
     }
 
@@ -184,7 +184,7 @@ impl SiteEntry {
 
     pub fn set_note(&mut self, new_note: Option<Zeroizing<String>>) -> Result<(), Error> {
         self.note.zeroize();
-        self.note = new_note.map(NoteBuf::new).transpose()?;
+        self.note = new_note.map(SecretBuf::new).transpose()?;
         Ok(())
     }
 }
@@ -208,7 +208,7 @@ impl FromEntry for SiteEntry {
 pub struct NoteEntry {
     id: Uuid,
     entry_name: Zeroizing<String>,
-    note: NoteBuf,
+    note: SecretBuf,
 }
 
 impl NoteEntry {
@@ -216,7 +216,7 @@ impl NoteEntry {
         Ok(NoteEntry {
             id: Uuid::new_v4(),
             entry_name,
-            note: NoteBuf::new(note)?,
+            note: SecretBuf::new(note)?,
         })
     }
 
@@ -239,7 +239,7 @@ impl NoteEntry {
 
     pub fn set_note(&mut self, new_note: Zeroizing<String>) -> Result<(), Error> {
         self.note.zeroize();
-        Ok(self.note = NoteBuf::new(new_note)?)
+        Ok(self.note = SecretBuf::new(new_note)?)
     }
 }
 
