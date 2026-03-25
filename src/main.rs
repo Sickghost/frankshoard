@@ -100,7 +100,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return init(cli.config);
     }
 
-    let locked_hoard = LockedHoard::from_path(cli.config)?;
+    let locked_hoard = LockedHoard::load_hoard(cli.config)?;
     if let Commands::ChangeMasterPassword = cli.command {
         return change_master_password(locked_hoard);
     }

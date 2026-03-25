@@ -15,13 +15,14 @@ use crate::vault::{VaultFile, DecryptedVault, FromEntry};
 use crate::config::Config;
 use crate::crypto::MasterKey;
 
+#[derive(Debug)]
 pub struct LockedHoard {
     config: Config,
     vault_file: VaultFile
 }
 
 impl LockedHoard {
-    pub fn from_path(config_path: Option<PathBuf>) -> Result<Self, Error> {
+    pub fn load_hoard(config_path: Option<PathBuf>) -> Result<Self, Error> {
         let config = LockedHoard::build_config(config_path)?;
 
         if !config.vault_file().try_exists()? {
@@ -79,6 +80,7 @@ impl LockedHoard {
     }
 }
 
+#[derive(Debug)]
 pub struct UnlockedHoard {
     config: Config,
     vault_file: VaultFile,

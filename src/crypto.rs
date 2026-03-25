@@ -8,7 +8,7 @@ use std::time::Instant;
 use crate::config::Config;
 use crate::error::Error;
 
-
+#[derive(Debug)]
 pub struct MasterKey {
     key: Zeroizing<Box<[u8]>>, // A box, because we want the key in the heap
     creation_time: Instant,  // TODO mechanism to handle that

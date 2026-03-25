@@ -34,8 +34,7 @@ Assuming the binary is in your path, invoke help on it.
 frankshoard --help
 ```
 
-Note that by default it will look for a config file in `~/.config/frankshoard`.  You can provide a path to the config file via the cli.
-If no configuration file are present, a default one is created.  The default setting uses just under 2 GiB (1953000 KiB) of memory to derive the key.  Even on a good computer this can take quite some time so you may want to change the default to something more reasonable.
+Note that when executing a command, by default it will look for a config file in `~/.config/frankshoard`.  You can provide a path to the config file via the cli.  If no configuration file are present, a default one is created.  The default setting uses just under 2 GiB (1953000 KiB) of memory to derive the key.  Even on a good computer this can take quite some time so you may want to change the default to something more reasonable.
 
 See `config/config.example.toml` to create and customize your own.
 
@@ -89,11 +88,7 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 - [x] AES-256-GCM encryption/decryption
 - [x] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
 - [x] CLI interface
-
-Release 1
-
 - [ ] Test Suite
-- [ ] Cleanup error handling (thiserror?)
 - [ ] Cleanup IO.  Add "verbose mode", remove all none-essential printouts, add logging
 - [ ] Add a TUI (ratatui)
 - [ ] Add a threaded timer to manage master_key lifecycle. (tokio)
