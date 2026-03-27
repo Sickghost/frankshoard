@@ -14,6 +14,9 @@ struct Cli {
     #[arg(short, long)]
     config: Option<PathBuf>,
 
+    #[arg(short, long)]
+    silent: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -96,13 +99,14 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
+    let silent = cli.silent;
     if let Commands::Init = cli.command {
-        return init(cli.config);
+        return init(cli.config, silent);
     }
 
     let locked_hoard = LockedHoard::load_hoard(cli.config)?;
     if let Commands::ChangeMasterPassword = cli.command {
-        return change_master_password(locked_hoard);
+        return change_master_password(locked_hoard, silent);
     }
 
     let password = Zeroizing::new(
@@ -111,27 +115,31 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .interact()?
     );
 
-    println!("Unlocking vault...");
+    if !silent {
+        println!("Unlocking vault...");
+    }
     let unlocked_hoard = locked_hoard.unlock(password)?;
 
     match cli.command {
         Commands::Init => unreachable!(),
         Commands::ChangeMasterPassword => unreachable!(),
-        Commands::Add {entry_type} => add(unlocked_hoard, entry_type),
-        Commands::ListAll => list_all(unlocked_hoard),
-        Commands::List {entry_type} => list(unlocked_hoard, entry_type),
-        Commands::Remove { uuid } => remove(unlocked_hoard, uuid),
-        Commands::Entry { uuid } => entry(unlocked_hoard, uuid),
-        Commands::EntryUsername { uuid } => entry_username(unlocked_hoard, uuid),
-        Commands::EntryPassword { uuid } => entry_password(unlocked_hoard, uuid),
-        Commands::EntryNote { uuid } => entry_note(unlocked_hoard, uuid),
+        Commands::Add {entry_type} => add(unlocked_hoard, entry_type, silent),
+        Commands::ListAll => list_all(unlocked_hoard, silent),
+        Commands::List {entry_type} => list(unlocked_hoard, entry_type, silent),
+        Commands::Remove { uuid } => remove(unlocked_hoard, uuid, silent),
+        Commands::Entry { uuid } => entry(unlocked_hoard, uuid, silent),
+        Commands::EntryUsername { uuid } => entry_username(unlocked_hoard, uuid, silent),
+        Commands::EntryPassword { uuid } => entry_password(unlocked_hoard, uuid, silent),
+        Commands::EntryNote { uuid } => entry_note(unlocked_hoard, uuid, silent),
     }
 }
 
-fn init(path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
     let locked_hoard = LockedHoard::new_hoard(path)?;
 
-    println!("Creating Vault...");
+    if !silent {
+        println!("Creating Vault...");
+    }
     // Ask for password
     let password = Zeroizing::new(
         Password::new()
@@ -140,16 +148,22 @@ fn init(path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
             .interact()?
     );
 
-    println!("Creating master key...");
+    if !silent {
+        println!("Creating master key...");
+    }
     let unlocked_hoard = locked_hoard.unlock(password)?;
-    println!("Saving vault...");
+    if !silent {
+        println!("Saving vault...");
+    }
     unlocked_hoard.lock_and_save()?;
 
-    println!("New vault created.");
+    if !silent {
+        println!("New vault created.");
+    }
     Ok(())
 }
 
-fn change_master_password(mut locked_hoard: LockedHoard) -> Result<(), Box<dyn std::error::Error>> {
+fn change_master_password(mut locked_hoard: LockedHoard, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let password = Zeroizing::new(
         Password::new()
             .with_prompt("Enter Current Master password")
@@ -163,130 +177,173 @@ fn change_master_password(mut locked_hoard: LockedHoard) -> Result<(), Box<dyn s
             .interact()?
     );
     locked_hoard.change_password(password, new_password)?;
+    if verbose {
+        println!("Password changed successfully.");
+    }
     Ok(())
 }
 
-fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands) -> Result<(), Box<dyn std::error::Error>> {
+fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
 
-    //TODO:  Ugly flow, refactore while implementing integration test.
-    if let AddCommands::Note{entry_name, note} = entry_type {
-        let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
-        println!("{}", entry.id());
-        unlocked_hoard.add_entry(entry)?;
+    match entry_type {
+        AddCommands::BasicPassword { entry_name, username } => {
+            // Ask for password
+            let password = Zeroizing::new(Password::new()
+                .with_prompt("Please enter password for new entry")
+                .with_confirmation("Confirm password", "Passwords do not match")
+                .interact()?);
+
+            let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password)?);
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
+        AddCommands::Site {entry_name, url, username, note} => {
+            // Ask for password
+            let password = Zeroizing::new(Password::new()
+                .with_prompt("Please enter password for new entry")
+                .with_confirmation("Confirm password", "Passwords do not match")
+                .interact()?);
+
+            let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note)?);
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
+        AddCommands::Note{entry_name, note} => {
+            let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
+            println!("{}", entry.id());
+            unlocked_hoard.add_entry(entry)?;
+        },
     }
-    else {
-
-        // Ask for password
-        let password = Zeroizing::new(Password::new()
-            .with_prompt("Please enter password for new entry")
-            .with_confirmation("Confirm password", "Passwords do not match")
-            .interact()?);
-
-        match entry_type {
-            AddCommands::BasicPassword { entry_name, username } => {
-                let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password)?);
-                println!("{}", entry.id());
-                unlocked_hoard.add_entry(entry)?;
-            },
-            AddCommands::Site {entry_name, url, username, note} => {
-                let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note)?);
-                println!("{}", entry.id());
-                unlocked_hoard.add_entry(entry)?;
-            },
-            AddCommands::Note {..} => unreachable!(),
-        }
+    if !silent {
+        println!("Saving new entry...");
     }
-    println!("Saving new entry...");
     unlocked_hoard.lock_and_save()?;
-    println!("Entry saved.");
+    if !silent {
+        println!("Entry saved.");
+    }
     Ok(())
 }
 
-fn list_all(unlocked_hoard: UnlockedHoard) -> Result<(), Box<dyn std::error::Error>> {
+fn list_all(unlocked_hoard: UnlockedHoard, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if !silent {
+        println!("Printing all entries...")
+    }
     let entries = unlocked_hoard.get_entries();
     for entry in entries {
         println!("{}", entry);
+    }
+    if !silent {
+        println!("Done.");
     }
     unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
-fn list(unlocked_hoard: UnlockedHoard, entry_type: ListCommands) -> Result<(), Box<dyn std::error::Error>> {
+fn list(unlocked_hoard: UnlockedHoard, entry_type: ListCommands, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
     match entry_type {
         ListCommands::BasicPassword => {
-            println!("Printing Basic Password List...");
+            if !silent {
+                println!("Printing Basic Password List...");
+            }
             for entry in unlocked_hoard.get_entries_of::<BasicPasswordEntry>() {
                 println!("{}", entry);
             }
         },
         ListCommands::Site => {
-            println!("Printing Site List...");
+            if !silent {
+                println!("Printing Site List...");
+            }
             for entry in unlocked_hoard.get_entries_of::<SiteEntry>() {
                 println!("{}", entry);
             }
         },
         ListCommands::Note => {
-            println!("Printing Note List...");
+            if !silent {
+                println!("Printing Note List...");
+            }
             for entry in unlocked_hoard.get_entries_of::<NoteEntry>() {
                 println!("{}", entry);
             }
         },
     }
-    println!("Done.");
+    if !silent {
+        println!("Done.");
+    }
     unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
-fn remove(mut unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
-    unlocked_hoard.remove_entry(uuid)?;
+fn remove(mut unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(..) = unlocked_hoard.remove_entry(uuid) else {
+        if !silent {
+            println!("Entry not found: {}", uuid)
+        }
+        return Ok(());
+    };
     unlocked_hoard.lock_and_save()?;
     Ok(())
 }
 
-fn entry(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(entry) = unlocked_hoard.get_entry(uuid) {
-        println!("{}", entry);
+fn entry(unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(entry) = unlocked_hoard.get_entry(uuid) else {
+        if !silent {
+            println!("Entry not found: {}", uuid)
+        }
+        return Ok(())
+    };
+    println!("{}", entry);
+    unlocked_hoard.lock_in_mem()?;
+    Ok(())
+}
+
+fn entry_username(unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(entry) = unlocked_hoard.get_entry(uuid) else {
+        if !silent {
+            println!("Entry not found: {}", uuid)
+        }
+        return Ok(())
+    };
+    match entry {
+        Entry::BasicPassword(password) => println!("{}", password.username()),
+        Entry::Site(site) => println!("{}", site.username()),
+        Entry::Note(_) => return Err("Command not supported for entry type".into()),
     }
     unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
-fn entry_username(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(entry) = unlocked_hoard.get_entry(uuid) {
-        match entry {
-            Entry::BasicPassword(password) => println!("{}", password.username()),
-            Entry::Site(site) => println!("{}", site.username()),
-            Entry::Note(_) => return Err("Command not supported for entry type".into()),
+fn entry_password(unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(entry) = unlocked_hoard.get_entry(uuid) else {
+        if !silent {
+            println!("Entry not found: {}", uuid)
         }
+        return Ok(())
+    };
+    match entry {
+        Entry::BasicPassword(password) => println!("{}", *password.password()?),
+        Entry::Site(site) => println!("{}", *site.password()?),
+        Entry::Note(_) => return Err("Command not supported for entry type".into()),
     }
     unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
-fn entry_password(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(entry) = unlocked_hoard.get_entry(uuid) {
-        match entry {
-            Entry::BasicPassword(password) => println!("{}", *password.password()?),
-            Entry::Site(site) => println!("{}", *site.password()?),
-            Entry::Note(_) => return Err("Command not supported for entry type".into()),
+fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(entry) = unlocked_hoard.get_entry(uuid) else {
+        if !silent {
+            println!("Entry not found: {}", uuid)
         }
-    }
-    unlocked_hoard.lock_in_mem()?;
-    Ok(())
-}
-
-fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(entry) = unlocked_hoard.get_entry(uuid) {
-        match entry {
-            Entry::BasicPassword(_) => return Err("Command not supported for entry type".into()),
-            Entry::Site(site) => {
-                match site.note()? {
-                    Some(n) => println!("{}", *n),
-                    None => println!("No note"),
-                }
-            },
-            Entry::Note(note) => println!("{}", *note.note()?),
-        }
+        return Ok(())
+    };
+    match entry {
+        Entry::BasicPassword(_) => return Err("Command not supported for entry type".into()),
+        Entry::Site(site) => {
+            match site.note()? {
+                Some(n) => println!("{}", *n),
+                None => if !silent {println!("No note")},
+            }
+        },
+        Entry::Note(note) => println!("{}", *note.note()?),
     }
     unlocked_hoard.lock_in_mem()?;
     Ok(())

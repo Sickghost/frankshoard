@@ -285,14 +285,11 @@ impl DecryptedVault {
         self.entries.iter().find(|e| e.id() == id)
     }
 
-    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), Error>{
+    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Option<Entry>{
         if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
-            self.entries.swap_remove(index); // vault makes no promise on order of entry
-            Ok(())
+            return Some(self.entries.swap_remove(index)); // vault makes no promise on order of entry
         }
-        else {
-            Err(Error::EntryNotFound)
-        }
+        None
     }
 
     // Public getter: Returns a slice for safe, read-only access

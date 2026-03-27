@@ -92,19 +92,50 @@ pub struct UnlockedHoard {
 
 impl UnlockedHoard {
 
-    pub(crate) fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
+    /// This unlocks the vault, decrypting all entries in memory.
+    ///
+    /// # Consumption
+    ///
+    /// This method consumes the `LockedHoard` to force the state change.
+    ///
+    /// # Returns
+    ///
+    /// Returns a [`UnlockedHoard`] with an with all entries decrypted.  Note the return vault was NOT saved to storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decrytion.
+    /// Returns [`Error::Encryption`] if there was a problem derivinng the master key from the password or decrypting the vault.
+    pub fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
         let master_key = MasterKey::from_password(password, &locked_hoard.vault_file.salt(), &locked_hoard.config)?;
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, &locked_hoard.vault_file.nonce(), &locked_hoard.vault_file.ciphertext())?;
 
-        let franks_hoard = UnlockedHoard {
+        Ok(UnlockedHoard {
             config: locked_hoard.config,
             vault_file: locked_hoard.vault_file,
             decrypted_vault,
             master_key,
-        };
-        Ok(franks_hoard)
+        })
     }
 
+    /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
+    /// Importantly, this does NOT persist the changes to file.  The intent of this method is to
+    /// wipe sensitive data from memory while maintaining a reference to the LockedVault.  It's intended
+    /// for use after read operations.
+    /// See also [`lock_and_save`]
+    ///
+    /// # Consumption
+    ///
+    /// This method consumes the `UnlockedHoard` to force the state change, also forcing sensitive data to be zeroed out.
+    ///
+    /// # Returns
+    ///
+    /// Returns a [`LockedHoard`] with an updated ciphertext.  Note the return vault was NOT saved to storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
+    /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
     pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         Ok(LockedHoard {
@@ -113,6 +144,23 @@ impl UnlockedHoard {
         })
     }
 
+    /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
+    /// The vault is also persisted to storage.
+    /// See also [`lock_in_mem`]
+    ///
+    /// # Consumption
+    ///
+    /// This method consumes the `UnlockedHoard` to force the state change, also forcing sensitive data to be zeroed out.
+    ///
+    /// # Returns
+    ///
+    /// Returns a [`LockedHoard`] with an updated ciphertext.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
+    /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
+    /// Returns [`Error::IO`] if there is a problem writing file to storage.
     pub fn lock_and_save(mut self) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         self.vault_file.save(self.config.vault_file())?;
@@ -139,9 +187,7 @@ impl UnlockedHoard {
         self.decrypted_vault.get_entry(uuid)
     }
 
-    //TODO: Silently do nothing on uuid not found.  If not found then should return false.  To refactor during
-    // integration tests writing .  UI can then ignore the boolean or not, depending no use case
-    pub fn remove_entry(&mut self, uuid: Uuid) -> Result<(), Error> {
+    pub fn remove_entry(&mut self, uuid: Uuid) -> Option<Entry> {
         self.decrypted_vault.remove_entry(uuid)
     }
 }
