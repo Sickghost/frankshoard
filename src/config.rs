@@ -53,8 +53,9 @@ impl Config {
     }
 
     pub fn from_default() -> Result<Self, Error> {
+        let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?.join(".frankshoard/vault.db");
         let conf = Config {
-            vault_file: Config::get_default_vault_path()?,
+            vault_file: home,
             argon2: Argon2Conf {
                 memory: 1953000,
                 iterations: 3,
@@ -68,14 +69,6 @@ impl Config {
     }
 
     pub fn default_config_path() -> Result<PathBuf, Error> {
-        // This is a big kludge for testing without abstracting/mocking the file system.  I may
-        // refactor this later with proper traits, but for now i just want to test and move forward.
-        // Sometimes tested code that works now is better than perfect code that works later
-        #[cfg(test)]
-        if let Ok(path) = std::env::var("FRANKSHOARD_TEST_CONFIG_PATH") {
-            return Ok(PathBuf::from(path));
-        }
-
         let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
         Ok(home.join(".config/frankshoard/config.toml"))
     }
@@ -100,19 +93,6 @@ impl Config {
 
     pub fn ui(&self) -> &UIConf {
         &self.ui
-    }
-
-    fn get_default_vault_path() -> Result<PathBuf, Error> {
-        // This is a big kludge for testing without abstracting/mocking the file system.  I may
-        // refactor this later with proper traits, but for now i just want to test and move forward.
-        // Sometimes tested code that works now is better than perfect code that works later
-        #[cfg(test)]
-        if let Ok(path) = std::env::var("FRANKSHOARD_TEST_VAULT_PATH") {
-            return Ok(PathBuf::from(path));
-        }
-
-        let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
-        Ok(home.join(".frankshoard/vault.db"))
     }
 }
 

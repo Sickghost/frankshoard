@@ -143,7 +143,7 @@ fn init(path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
     println!("Creating master key...");
     let unlocked_hoard = locked_hoard.unlock(password)?;
     println!("Saving vault...");
-    unlocked_hoard.lock(true)?;
+    unlocked_hoard.lock_and_save()?;
 
     println!("New vault created.");
     Ok(())
@@ -191,7 +191,7 @@ fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands) -> Result<(),
         },
     }
     println!("Saving new entry...");
-    unlocked_hoard.lock(true)?;
+    unlocked_hoard.lock_and_save()?;
     println!("Entry saved.");
     Ok(())
 }
@@ -201,7 +201,7 @@ fn list_all(unlocked_hoard: UnlockedHoard) -> Result<(), Box<dyn std::error::Err
     for entry in entries {
         println!("{}", entry);
     }
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }
 
@@ -227,13 +227,13 @@ fn list(unlocked_hoard: UnlockedHoard, entry_type: ListCommands) -> Result<(), B
         },
     }
     println!("Done.");
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }
 
 fn remove(mut unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
     unlocked_hoard.remove_entry(uuid)?;
-    unlocked_hoard.lock(true)?;
+    unlocked_hoard.lock_and_save()?;
     Ok(())
 }
 
@@ -241,7 +241,7 @@ fn entry(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::e
     if let Some(entry) = unlocked_hoard.get_entry(uuid) {
         println!("{}", entry);
     }
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }
 
@@ -253,7 +253,7 @@ fn entry_username(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<d
             Entry::Note(_) => return Err("Command not supported for entry type".into()),
         }
     }
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }
 
@@ -265,7 +265,7 @@ fn entry_password(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<d
             Entry::Note(_) => return Err("Command not supported for entry type".into()),
         }
     }
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }
 
@@ -282,6 +282,6 @@ fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn s
             Entry::Note(note) => println!("{}", *note.note()?),
         }
     }
-    unlocked_hoard.lock(false)?;
+    unlocked_hoard.lock()?;
     Ok(())
 }

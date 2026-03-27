@@ -335,7 +335,7 @@ impl VaultFile {
             return Err(Error::VaultNotFound);
         }
 
-        let bytes = fs::read(path)?;
+        let bytes = Zeroizing::new(fs::read(path)?);  // password manager, we expect small db so we read it all in mem
         let mut cursor = Cursor::new(bytes);
 
         let mut salt = [0u8; 32];

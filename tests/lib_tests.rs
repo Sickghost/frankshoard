@@ -24,7 +24,7 @@ mod hoard_test {
 
     // Create a empty vault at the given path. Intended to use with temp files
     fn create_test_empty_vault(path: PathBuf) {
-        let locked_hoard = LockedHoard::new_hoard(Some(path.clone())).unwrap();
+        let locked_hoard = LockedHoard::new_hoard(Some(path)).unwrap();
         locked_hoard.unlock(Zeroizing::new(VAULT_PASSWORD.to_string())).unwrap().lock(true).unwrap();
     }
 
@@ -85,9 +85,12 @@ mod hoard_test {
     }
 
     #[test]
-    fn open_exiting_locked_hoard_default_path() {
+    fn open_exiting_locked_hoard_default_config() {
         let _dir = setup_default_paths();
-        create_test_empty_vault(PathBuf::from(std::env::var("FRANKSHOARD_TEST_CONFIG_PATH").unwrap()));
+        let config_path = PathBuf::from(std::env::var("FRANKSHOARD_TEST_CONFIG_PATH").unwrap());
+        assert!(!config_path.exists());  // no config exists
+        assert!(!PathBuf::from(std::env::var("FRANKSHOARD_TEST_VAULT_PATH").unwrap()).exists());
+        create_test_empty_vault(config_path);
 
         let result = LockedHoard::load_hoard(None);
         assert!(result.is_ok(), "expected Ok but got {:?}", result);

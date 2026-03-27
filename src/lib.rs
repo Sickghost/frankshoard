@@ -37,9 +37,11 @@ impl LockedHoard {
     }
 
     pub fn new_hoard(config_path: Option<PathBuf>) -> Result<Self, Error> {
+        println!("Fuck 0: {:?}", config_path);
         let config = LockedHoard::build_config(config_path)?;
 
         if config.vault_file().try_exists()? {
+            println!("Fuck 1: {:?}", config.vault_file());
             return Err(Error::VaultAlreadyExists);
         }
 
@@ -60,8 +62,10 @@ impl LockedHoard {
         if path.try_exists()? {
             config = Config::from_path(&path)?;
         } else {
+            println!("fuck fuck");
             config = Config::from_default()?;
             config.save_file(&path)?;
+            println!("fuck fuck: {:?}", config);
         }
         Ok(config)
     }
@@ -76,7 +80,8 @@ impl LockedHoard {
 
         self.vault_file.update_salt();
         let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
-        self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)
+        self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)?;
+        self.vault_file.save(self.config.vault_file())
     }
 }
 
@@ -104,11 +109,17 @@ impl UnlockedHoard {
         Ok(franks_hoard)
     }
 
-    pub fn lock(mut self, save: bool) -> Result<LockedHoard, Error>{
+    pub fn lock(mut self) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
-        if save {
-            self.vault_file.save(self.config.vault_file())?;
-        }
+        Ok(LockedHoard {
+            config: self.config,
+            vault_file: self.vault_file,
+        })
+    }
+
+    pub fn lock_and_save(mut self) -> Result<LockedHoard, Error>{
+        self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
+        self.vault_file.save(self.config.vault_file())?;
 
         Ok(LockedHoard {
             config: self.config,
@@ -125,7 +136,7 @@ impl UnlockedHoard {
     }
 
     pub fn get_entries_of<'a, T: FromEntry + 'a>(&'a self) -> impl Iterator<Item = &'a T> + 'a {
-        self.decrypted_vault.get_entries_of::<>()
+        self.decrypted_vault.get_entries_of::<T>()
     }
 
     pub fn get_entry(&self, uuid: Uuid) -> Option<&Entry> {
