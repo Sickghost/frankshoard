@@ -167,28 +167,34 @@ fn change_master_password(mut locked_hoard: LockedHoard) -> Result<(), Box<dyn s
 }
 
 fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands) -> Result<(), Box<dyn std::error::Error>> {
-    // Ask for password
-    let password = Zeroizing::new(Password::new()
-        .with_prompt("Please enter password for new entry")
-        .with_confirmation("Confirm password", "Passwords do not match")
-        .interact()?);
 
-    match entry_type {
-        AddCommands::BasicPassword { entry_name, username } => {
-            let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password)?);
-            println!("{}", entry.id());
-            unlocked_hoard.add_entry(entry)?;
-        },
-        AddCommands::Site {entry_name, url, username, note} => {
-            let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note)?);
-            println!("{}", entry.id());
-            unlocked_hoard.add_entry(entry)?;
-        },
-        AddCommands::Note { entry_name, note } => {
-            let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
-            println!("{}", entry.id());
-            unlocked_hoard.add_entry(entry)?;
-        },
+    //TODO:  Ugly flow, refactore while implementing integration test.
+    if let AddCommands::Note{entry_name, note} = entry_type {
+        let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
+        println!("{}", entry.id());
+        unlocked_hoard.add_entry(entry)?;
+    }
+    else {
+
+        // Ask for password
+        let password = Zeroizing::new(Password::new()
+            .with_prompt("Please enter password for new entry")
+            .with_confirmation("Confirm password", "Passwords do not match")
+            .interact()?);
+
+        match entry_type {
+            AddCommands::BasicPassword { entry_name, username } => {
+                let entry = Entry::BasicPassword(BasicPasswordEntry::new(entry_name, username, password)?);
+                println!("{}", entry.id());
+                unlocked_hoard.add_entry(entry)?;
+            },
+            AddCommands::Site {entry_name, url, username, note} => {
+                let entry = Entry::Site(SiteEntry::new(entry_name, url, username, password, note)?);
+                println!("{}", entry.id());
+                unlocked_hoard.add_entry(entry)?;
+            },
+            AddCommands::Note {..} => unreachable!(),
+        }
     }
     println!("Saving new entry...");
     unlocked_hoard.lock_and_save()?;
@@ -201,7 +207,7 @@ fn list_all(unlocked_hoard: UnlockedHoard) -> Result<(), Box<dyn std::error::Err
     for entry in entries {
         println!("{}", entry);
     }
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
@@ -227,7 +233,7 @@ fn list(unlocked_hoard: UnlockedHoard, entry_type: ListCommands) -> Result<(), B
         },
     }
     println!("Done.");
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
@@ -241,7 +247,7 @@ fn entry(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn std::e
     if let Some(entry) = unlocked_hoard.get_entry(uuid) {
         println!("{}", entry);
     }
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
@@ -253,7 +259,7 @@ fn entry_username(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<d
             Entry::Note(_) => return Err("Command not supported for entry type".into()),
         }
     }
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
@@ -265,7 +271,7 @@ fn entry_password(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<d
             Entry::Note(_) => return Err("Command not supported for entry type".into()),
         }
     }
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }
 
@@ -282,6 +288,6 @@ fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid) -> Result<(), Box<dyn s
             Entry::Note(note) => println!("{}", *note.note()?),
         }
     }
-    unlocked_hoard.lock()?;
+    unlocked_hoard.lock_in_mem()?;
     Ok(())
 }

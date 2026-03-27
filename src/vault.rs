@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::OpenOptions;
+use std::os::unix::fs::OpenOptionsExt;
 use std::fmt;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -178,7 +179,7 @@ impl SiteEntry {
     pub fn note(&self) -> Result<Option<Zeroizing<String>>, Error> {
         match &self.note {
             Some(n) => Ok(Some(n.as_str()?)),
-            None => return Ok(None),
+            None => Ok(None),
         }
     }
 
@@ -239,7 +240,8 @@ impl NoteEntry {
 
     pub fn set_note(&mut self, new_note: Zeroizing<String>) -> Result<(), Error> {
         self.note.zeroize();
-        Ok(self.note = SecretBuf::new(new_note)?)
+        self.note = SecretBuf::new(new_note)?;
+        Ok(())
     }
 }
 
@@ -255,16 +257,12 @@ impl FromEntry for NoteEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct DecryptedVault {
     entries: Vec<Entry>, // data in a Vec are always on the heap, so should be safe to just zero them like that
 }
 
 impl DecryptedVault {
-    pub fn new() -> Self {
-        DecryptedVault { entries: Vec::new() }
-    }
-
     pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, Error> {
         if ciphertext.is_empty() {
             Ok(DecryptedVault { entries: Vec::new() })
@@ -289,7 +287,7 @@ impl DecryptedVault {
 
     pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), Error>{
         if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
-            self.entries.swap_remove(index);
+            self.entries.swap_remove(index); // vault makes no promise on order of entry
             Ok(())
         }
         else {
@@ -365,7 +363,7 @@ impl VaultFile {
 
         let tmp_path = path.with_extension("tmp");
 
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp_path)?;
         file.write_all(&self.salt)?;
         file.write_all(&self.nonce)?;
         file.write_all(&self.ciphertext)?;

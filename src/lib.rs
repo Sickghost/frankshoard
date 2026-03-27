@@ -37,11 +37,9 @@ impl LockedHoard {
     }
 
     pub fn new_hoard(config_path: Option<PathBuf>) -> Result<Self, Error> {
-        println!("Fuck 0: {:?}", config_path);
         let config = LockedHoard::build_config(config_path)?;
 
         if config.vault_file().try_exists()? {
-            println!("Fuck 1: {:?}", config.vault_file());
             return Err(Error::VaultAlreadyExists);
         }
 
@@ -58,15 +56,13 @@ impl LockedHoard {
             None => Config::default_config_path()?,
         };
 
-        let config;
-        if path.try_exists()? {
-            config = Config::from_path(&path)?;
+        let config = if path.try_exists()? {
+            Config::from_path(&path)?
         } else {
-            println!("fuck fuck");
-            config = Config::from_default()?;
-            config.save_file(&path)?;
-            println!("fuck fuck: {:?}", config);
-        }
+            let default_config = Config::from_default()?;
+            default_config.save_file(&path)?;
+            default_config
+        };
         Ok(config)
     }
 
@@ -109,7 +105,7 @@ impl UnlockedHoard {
         Ok(franks_hoard)
     }
 
-    pub fn lock(mut self) -> Result<LockedHoard, Error>{
+    pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         Ok(LockedHoard {
             config: self.config,
@@ -143,6 +139,8 @@ impl UnlockedHoard {
         self.decrypted_vault.get_entry(uuid)
     }
 
+    //TODO: Silently do nothing on uuid not found.  If not found then should return false.  To refactor during
+    // integration tests writing .  UI can then ignore the boolean or not, depending no use case
     pub fn remove_entry(&mut self, uuid: Uuid) -> Result<(), Error> {
         self.decrypted_vault.remove_entry(uuid)
     }
