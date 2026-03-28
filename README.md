@@ -89,7 +89,7 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 - [x] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
 - [x] CLI interface
 - [ ] Test Suite
-- [ ] Cleanup IO.  Add "verbose mode", remove all none-essential printouts, add logging
+- [ ] Cleanup IO.  Add "silent mode", remove all none-essential printouts, add logging
 - [ ] Add a TUI (ratatui)
 - [ ] Add a threaded timer to manage master_key lifecycle. (tokio)
 

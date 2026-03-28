@@ -1,3 +1,4 @@
+use dirs::home_dir;
 use clap::{Parser,Subcommand};
 use dialoguer::{Password};
 use uuid::Uuid;
@@ -5,7 +6,14 @@ use zeroize::Zeroizing;
 use std::path::PathBuf;
 use url::Url;
 
-use frankshoard::{Entry, BasicPasswordEntry, SiteEntry, NoteEntry, LockedHoard, UnlockedHoard};
+use frankshoard::{BasicPasswordEntry, Config, Argon2Conf, UIConf, Entry, LockedHoard, NoteEntry, SiteEntry, UnlockedHoard, Error};
+
+const DEFAULT_CONFIG_PATH: &str = ".config/frankshoard/config.toml";
+const DEFAULT_VAULT_PATH: &str = ".frankshoard/vault.db";
+const DEFAULT_ARGON2_MEMORY: u32 = 2097152;
+const DEFAULT_ARGON2_ITR: u32 = 3;
+const DEFAULT_ARGON2_PARA: u32 = 1;
+const DEFAULT_UI_SESSION_TIMEOUT_SEC: u32 = 300;
 
 #[derive(Parser)]
 #[command(name = "frankshoard")]
@@ -100,11 +108,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let silent = cli.silent;
+    let config = build_config(cli.config)?;
     if let Commands::Init = cli.command {
-        return init(cli.config, silent);
+        return init(config, silent);
     }
 
-    let locked_hoard = LockedHoard::load_hoard(cli.config)?;
+    let locked_hoard = LockedHoard::load_hoard(config)?;
     if let Commands::ChangeMasterPassword = cli.command {
         return change_master_password(locked_hoard, silent);
     }
@@ -134,10 +143,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn init(config: Config, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
     // Ask for password
     if !silent {
-        println!("A new vault needs a master password.  Chose it and record it safely and carefully, if you lose your master password is not way to retreive it.");
+        println!("A new vault needs a master password.  Chose it and record it safely and carefully, if you lose your master password, there is no way to retrieve it.");
     }
     let password = Zeroizing::new(
         Password::new()
@@ -149,25 +158,14 @@ fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::E
     if !silent {
         println!("Creating master key and generating vault...");
     }
-
-    LockedHoard::new_hoard(path, password)?;
-
-    /*if !silent {
-        println!("Creating master key...");
-    }
-    let unlocked_hoard = locked_hoard.unlock(password)?;
-    if !silent {
-        println!("Saving vault...");
-    }
-    unlocked_hoard.lock_and_save()?;
-    */
+    LockedHoard::new_hoard(config, password)?;
     if !silent {
         println!("New vault created.");
     }
     Ok(())
 }
 
-fn change_master_password(mut locked_hoard: LockedHoard, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn change_master_password(mut locked_hoard: LockedHoard, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
     let password = Zeroizing::new(
         Password::new()
             .with_prompt("Enter Current Master password")
@@ -181,7 +179,7 @@ fn change_master_password(mut locked_hoard: LockedHoard, verbose: bool) -> Resul
             .interact()?
     );
     locked_hoard.change_password(password, new_password)?;
-    if verbose {
+    if !silent {
         println!("Password changed successfully.");
     }
     Ok(())
@@ -351,4 +349,26 @@ fn entry_note(unlocked_hoard: UnlockedHoard, uuid: Uuid, silent: bool) -> Result
     }
     unlocked_hoard.lock_in_mem()?;
     Ok(())
+}
+
+fn build_config(config_path: Option<PathBuf>) -> Result<Config, Error> {
+    let home = home_dir().ok_or(Error::HomeDirectoryNotFound)?;
+
+    let config_path = match config_path {
+        Some(p) => p,
+        None => {
+            PathBuf::from(home.join(DEFAULT_CONFIG_PATH))
+        },
+    };
+
+    if config_path.try_exists()? {
+        Config::from_path(&config_path)
+    } else {
+        let default_vault_file = PathBuf::from(home.join(DEFAULT_VAULT_PATH));
+        let default_argon2 = Argon2Conf::new(DEFAULT_ARGON2_MEMORY, DEFAULT_ARGON2_ITR, DEFAULT_ARGON2_PARA);
+        let default_uiconf = UIConf::new(DEFAULT_UI_SESSION_TIMEOUT_SEC);
+        let default_config = Config::new(default_vault_file, default_argon2, default_uiconf)?;
+        default_config.save_file(&config_path)?;
+        Ok(default_config)
+    }
 }

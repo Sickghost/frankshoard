@@ -8,15 +8,15 @@ use std::path::PathBuf;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+pub use crate::config::{Argon2Conf, UIConf, Config};
 pub use crate::error::Error;
 pub use crate::vault::{Entry, SiteEntry, NoteEntry, BasicPasswordEntry};
 
 use crate::vault::{VaultFile, DecryptedVault, FromEntry};
-use crate::config::Config;
 use crate::crypto::MasterKey;
 
 /// An encrypted in-memory representation of a frankshoard vault.
-/// A 'LockedHoard` can be created empty, from a saved vault or optianedfrom an `UnlockedHoard` after locking it.
+/// A 'LockedHoard` can be created empty, from a saved vault or from an `UnlockedHoard` after locking it.
 #[derive(Debug)]
 pub struct LockedHoard {
     config: Config,
@@ -28,8 +28,7 @@ impl LockedHoard {
     ///
     /// # Arguments
     ///
-    /// * `config_path` - An optinal path to the saved vault.  If `Some`, that path will be used to locate
-    /// the saved vault. If `None`, a defualt path value will be used (see [`Config`]).
+    /// * `config` - An [`Config`] for the vault.
     ///
     /// # Returns
     ///
@@ -37,35 +36,27 @@ impl LockedHoard {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::HomeDirectoryNotFound`] if there is an issue expanding a '~' contained in a path.
     /// Returns [`Error::Io`] If there is an issue accessing the file system.
-    /// Returns [`Error::VaultAlreadyExists`] if the path used points to an existing file.
-    pub fn load_hoard(config_path: Option<PathBuf>) -> Result<Self, Error> {
-        let config = LockedHoard::build_config(config_path)?;
-
-        if !config.vault_file().try_exists()? {
-            return Err(Error::VaultNotFound);
-        }
+    /// Returns [`Error::VaultNotFound`] if the file cannot be found.
+    pub fn load_hoard(config: Config) -> Result<Self, Error> {
         let vault_file = VaultFile::from_path(config.vault_file())?;
-
         Ok(LockedHoard {
             config,
             vault_file,
         })
     }
 
-    /// Creates a new empty vault.
+    /// Creates a new empty vault.  Note that the vault file is persisted to
+    /// storage as part of it's creation.
     ///
     /// # Security Warning
     ///
-    /// To minimize risk of two new vault being created at he same time pointing to the same path, this function should never be called
-    /// from different threads at the same time or a race condition could occure.  This almost certainly would lead to vault corruption.
+    /// To minimize risk of two new vault being created at the same time pointing to the same path, this function should never be called
+    /// from different threads at the same time or a race condition could occur.  This almost certainly would lead to vault corruption.
     ///
     /// # Arguments
     ///
-    /// * `config_path` - An optinal path that will be used when the vault needs to be saved.
-    /// If `None`, a default path value will be used (see [`Config`]).  Note that the vault file is persisted to
-    /// storage as part of it's creation.
+    /// * `config` - An [`Config`] for the vault.
     /// * `password` - The new master password for this vault.
     ///
     /// # Returns
@@ -74,13 +65,10 @@ impl LockedHoard {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::HomeDirectoryNotFound`] if there is an issue expanding a '~' contained in a path.
+    /// Returns [`Error::VaultAlreadyExists`] if a vault file already exists at the configured path.
     /// Returns [`Error::Io`] If there is an issue reading the vault file
-    /// Returns [`Error::VaultNotFound`] if the path does not exists.
     /// Returns [`Error::MalformedVault`] if there was a problem deserializing the file pointed by the provided path.
-    pub fn new_hoard(config_path: Option<PathBuf>, password: Zeroizing<String>) -> Result<Self, Error> {
-        let config = LockedHoard::build_config(config_path)?;
-
+    pub fn new_hoard(config: Config, password: Zeroizing<String>) -> Result<Self, Error> {
         if config.vault_file().try_exists()? {
             return Err(Error::VaultAlreadyExists);
         }
@@ -96,22 +84,6 @@ impl LockedHoard {
         Ok(locked_hoard)
     }
 
-    fn build_config(config_path: Option<PathBuf>) -> Result<Config, Error> {
-        let path = match config_path {
-            Some(p) => p,
-            None => Config::default_config_path()?,
-        };
-
-        let config = if path.try_exists()? {
-            Config::from_path(&path)?
-        } else {
-            let default_config = Config::from_default()?;
-            default_config.save_file(&path)?;
-            default_config
-        };
-        Ok(config)
-    }
-
     /// Unlocks this vault and returns a [`UnlockedHoard`], which contains all decrypted entries in memory.
     ///
     /// # Arguments
@@ -125,12 +97,12 @@ impl LockedHoard {
     /// # Errors
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decrytion.
-    /// Returns [`Error::Encryption`] if there was a problem derivinng the master key from the password or decrypting the vault.
+    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
     pub fn unlock(self, password: Zeroizing<String>) -> Result<UnlockedHoard, Error> {
         UnlockedHoard::unlock(self, &password)
     }
 
-    /// Decript the vault with the `password` and then re-encrypted it using `new_password` and a new salt before persisting it to
+    /// Decrypt the vault with the `password` and then re-encrypted it using `new_password` and a new salt before persisting it to
     /// storage again.
     ///
     /// # Arguments
@@ -141,7 +113,7 @@ impl LockedHoard {
     /// # Errors
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing or serializing the vault entries during encryption/decrytion.
-    /// Returns [`Error::Encryption`] if there was a problem derivinng the master key from the password or decrypting/encrypting the vault.
+    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting/encrypting the vault.
     /// Returns [`Error::Io`] if there is an issue persisting the vault  to storage.
     pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), Error> {
         let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
@@ -172,15 +144,11 @@ pub struct UnlockedHoard {
 }
 
 impl UnlockedHoard {
-    /// This unlocks the vault, decrypting all entries in memory.
-    ///
-    /// # Consumption
-    ///
-    /// This method consumes the `LockedHoard` to force the state change.
+    /// This unlocks the vault, decrypting all entries in memory.  This method consumes the `LockedHoard` to force the state change.
     ///
     /// # Arguments
     ///
-    /// * `locaked_hoard` - A `LockedHoard` containing the encrypted representation of the vault.
+    /// * `locked_hoard` - A `LockedHoard` containing the encrypted representation of the vault.
     /// * `password` - The master password for the vault.
     ///
     /// # Returns
@@ -190,7 +158,7 @@ impl UnlockedHoard {
     /// # Errors
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decrytion.
-    /// Returns [`Error::Encryption`] if there was a problem derivinng the master key from the password or decrypting the vault.
+    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
     fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
         let master_key = MasterKey::from_password(password, &locked_hoard.vault_file.salt(), &locked_hoard.config)?;
         let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, &locked_hoard.vault_file.nonce(), &locked_hoard.vault_file.ciphertext())?;
@@ -206,12 +174,9 @@ impl UnlockedHoard {
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
     /// Importantly, this does NOT persist the changes to file.  The intent of this method is to
     /// wipe sensitive data from memory while maintaining a reference to the LockedVault.  It's intended
-    /// for use after read operations.
+    /// for use after read operations. This method consumes the `UnlockedHoard` to force the state change,
+    /// also forcing sensitive data to be zeroed out.
     /// See also [`lock_and_save`]
-    ///
-    /// # Consumption
-    ///
-    /// This method consumes the `UnlockedHoard` to force the state change, also forcing sensitive data to be zeroed out.
     ///
     /// # Returns
     ///
@@ -230,12 +195,9 @@ impl UnlockedHoard {
     }
 
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
-    /// The vault is also persisted to storage.
+    /// The vault is also persisted to storage.  This method consumes the `UnlockedHoard`
+    /// to force the state change, also forcing sensitive data to be zeroed out.
     /// See also [`lock_in_mem`]
-    ///
-    /// # Consumption
-    ///
-    /// This method consumes the `UnlockedHoard` to force the state change, also forcing sensitive data to be zeroed out.
     ///
     /// # Returns
     ///
@@ -245,7 +207,7 @@ impl UnlockedHoard {
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
-    /// Returns [`Error::IO`] if there is a problem writing file to storage.
+    /// Returns [`Error::Io`] if there is a problem writing file to storage.
     pub fn lock_and_save(mut self) -> Result<LockedHoard, Error>{
         self.vault_file.update_ciphertext(&self.decrypted_vault, &self.master_key)?;
         self.vault_file.save(self.config.vault_file())?;
@@ -269,7 +231,7 @@ impl UnlockedHoard {
         self.decrypted_vault.add_entry(entry)
     }
 
-    /// Returns an slice contianing all the entries contian in this vault.  No guarentee is made on the
+    /// Returns an slice containing all the entries contained in this vault.  No guarantee is made on the
     /// ordering of this slice from call to call.
     ///
     /// # Returns
@@ -290,7 +252,9 @@ impl UnlockedHoard {
     ///
     /// * `T` - The target type that implements [`FromEntry`].
     ///
-    /// # Returns an iterator over all entries of the specific type.
+    /// # Returns
+    ///
+    /// An iterator over all entries of the specific type.
     ///
     ///
     pub fn get_entries_of<'a, T: FromEntry + 'a>(&'a self) -> impl Iterator<Item = &'a T> + 'a {
@@ -319,7 +283,7 @@ impl UnlockedHoard {
     ///
     /// # Returns
     ///
-    /// * `Some(&Entry)` - A reference to the entry that was removed if a match is found.
+    /// * `Some(Entry)` -The entry that was removed if a match is found.
     /// * `None` - If no entry exists with the provided `uuid`.
     pub fn remove_entry(&mut self, uuid: Uuid) -> Option<Entry> {
         self.decrypted_vault.remove_entry(uuid)
