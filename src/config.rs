@@ -37,6 +37,7 @@ impl UIConf {
     }
 }
 
+// TODO: Needs rustdoc
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     vault_file: PathBuf,
@@ -57,7 +58,7 @@ impl Config {
         let conf = Config {
             vault_file: home,
             argon2: Argon2Conf {
-                memory: 1953000,
+                memory: 2097152,
                 iterations: 3,
                 parallelism: 1,
             },

@@ -8,7 +8,7 @@ mod hoard_test {
     use frankshoard::*;  // imports everything from the public api
 
 
-    const VAULT_PASSWORD: &str = "q0w1e2r3t4y5u6i7o8p9a;s,d.f!g@h#j$k%lˆz&x*c(v)b-n_m=Q+W<E>R?T/Y\"U\\I|O[A]S{D}F~G`H'J KLZXCVBNM";
+    const MASTER_PASSWORD: &str = "q0w1e2r3t4y5u6i7o8p9a;s,d.f!g@h#j$k%lˆz&x*c(v)b-n_m=Q+W<E>R?T/Y\"U\\I|O[A]S{D}F~G`H'J KLZXCVBNM";
 
     /// Part of the kludge to test default file locations (see comments in config.rs).
     /// We use nextest to run test, so we should be ok using the usafe set_var()
@@ -24,14 +24,13 @@ mod hoard_test {
 
     // Create a empty vault at the given path. Intended to use with temp files
     fn create_test_empty_vault(path: PathBuf) {
-        let locked_hoard = LockedHoard::new_hoard(Some(path)).unwrap();
-        locked_hoard.unlock(Zeroizing::new(VAULT_PASSWORD.to_string())).unwrap().lock(true).unwrap();
+        LockedHoard::new_hoard(Some(path), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
     }
 
     // Create a vault at the given path and fill it with two entries of eacht type. Intended to use with temp files
     fn create_test_vault_with_entries(path: PathBuf) {
-        let locked_hoard = LockedHoard::new_hoard(Some(path.clone())).unwrap();
-        let mut unlocked_vault = locked_hoard.unlock(Zeroizing::new(VAULT_PASSWORD.to_string())).unwrap();
+        let locked_hoard = LockedHoard::new_hoard(Some(path.clone()), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
+        let mut unlocked_vault = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 
         let basic_password_entry_1 = Entry::BasicPassword(BasicPasswordEntry::new(
             Zeroizing::new("basic password 1".to_string()),
@@ -81,7 +80,7 @@ mod hoard_test {
         assert!(unlocked_vault.add_entry(note_entry_1).is_ok());
         assert!(unlocked_vault.add_entry(note_entry_2).is_ok());
 
-        unlocked_vault.lock(true).unwrap();
+        unlocked_vault.lock_and_save().unwrap();
     }
 
     #[test]
@@ -96,7 +95,7 @@ mod hoard_test {
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let locked_hoard = result.unwrap();
 
-        let result = locked_hoard.unlock(Zeroizing::new(VAULT_PASSWORD.to_string()));
+        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let unlocked_hoard = result.unwrap();
         assert!(unlocked_hoard.get_entries().len() == 0)

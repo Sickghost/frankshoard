@@ -135,12 +135,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let locked_hoard = LockedHoard::new_hoard(path)?;
-
-    if !silent {
-        println!("Creating Vault...");
-    }
     // Ask for password
+    if !silent {
+        println!("A new vault needs a master password.  Chose it and record it safely and carefully, if you lose your master password is not way to retreive it.");
+    }
     let password = Zeroizing::new(
         Password::new()
             .with_prompt("Enter Master password")
@@ -149,6 +147,12 @@ fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::E
     );
 
     if !silent {
+        println!("Creating master key and generating vault...");
+    }
+
+    LockedHoard::new_hoard(path, password)?;
+
+    /*if !silent {
         println!("Creating master key...");
     }
     let unlocked_hoard = locked_hoard.unlock(password)?;
@@ -156,7 +160,7 @@ fn init(path: Option<PathBuf>, silent: bool) -> Result<(), Box<dyn std::error::E
         println!("Saving vault...");
     }
     unlocked_hoard.lock_and_save()?;
-
+    */
     if !silent {
         println!("New vault created.");
     }
