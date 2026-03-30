@@ -180,6 +180,9 @@ mod hoard_test {
         let mut locked_hoard = LockedHoard::new_hoard(create_test_config(&vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
         let result = locked_hoard.change_password(Zeroizing::new(MASTER_PASSWORD.to_string()), Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
+
+        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", result);
     }
 
     #[test]
@@ -188,6 +191,9 @@ mod hoard_test {
         let mut locked_hoard = get_filled_hoard(&vault_dir);
         let result = locked_hoard.change_password(Zeroizing::new(MASTER_PASSWORD.to_string()), Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
+
+        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", result);
     }
 
     #[test]
@@ -238,6 +244,8 @@ mod hoard_test {
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let mut unlocked_hoard = result.unwrap();
 
+        // After deleting, the vault makes no guarantee on order of the entries, so we get ALL uuids
+        // first and will delete after.
         let uuids: Vec<Uuid> = unlocked_hoard.get_entries().iter()
             .map(|e| e.id())
             .collect();
