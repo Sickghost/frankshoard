@@ -4,7 +4,6 @@ mod vault;
 mod crypto;
 mod secretbuf;
 
-use std::path::PathBuf;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -38,6 +37,7 @@ impl LockedHoard {
     ///
     /// Returns [`Error::Io`] If there is an issue accessing the file system.
     /// Returns [`Error::VaultNotFound`] if the file cannot be found.
+    /// Returns [`Error::MalformedVault`] if there was a problem deserializing the file pointed by the provided path.
     pub fn load_hoard(config: Config) -> Result<Self, Error> {
         let vault_file = VaultFile::from_path(config.vault_file())?;
         Ok(LockedHoard {
@@ -67,7 +67,6 @@ impl LockedHoard {
     ///
     /// Returns [`Error::VaultAlreadyExists`] if a vault file already exists at the configured path.
     /// Returns [`Error::Io`] If there is an issue reading the vault file
-    /// Returns [`Error::MalformedVault`] if there was a problem deserializing the file pointed by the provided path.
     pub fn new_hoard(config: Config, password: Zeroizing<String>) -> Result<Self, Error> {
         if config.vault_file().try_exists()? {
             return Err(Error::VaultAlreadyExists);
