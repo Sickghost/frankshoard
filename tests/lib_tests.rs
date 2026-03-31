@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod hoard_test {
-    use dirs::home_dir;
     use uuid::Uuid;
-    use std::path::Path;
     use tempfile::{tempdir, TempDir};
     use zeroize::Zeroizing;
     use url::Url;
@@ -25,7 +23,7 @@ mod hoard_test {
         LockedHoard::new_hoard(create_test_config(vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
     }
 
-    fn create_test_vault_with_entries(vault_dir: &TempDir) {
+    fn create_test_vault_with_entries(vault_dir: &TempDir) -> [Uuid; 6] {
         let locked_hoard = LockedHoard::new_hoard(create_test_config(vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
         let mut unlocked_vault = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 
@@ -70,14 +68,21 @@ mod hoard_test {
                  nisi ut aliquip ex ea commodo consequat.".to_string())
         ).unwrap());
 
+        let bp_1_id: Uuid = basic_password_entry_1.id();
         assert!(unlocked_vault.add_entry(basic_password_entry_1).is_ok());
+        let bp_2_id: Uuid = basic_password_entry_2.id();
         assert!(unlocked_vault.add_entry(basic_password_entry_2).is_ok());
+        let se_1_id: Uuid = site_entry_without_note.id();
         assert!(unlocked_vault.add_entry(site_entry_without_note).is_ok());
+        let se_2_id: Uuid = site_entry_with_note.id();
         assert!(unlocked_vault.add_entry(site_entry_with_note).is_ok());
+        let ne_1_id: Uuid = note_entry_1.id();
         assert!(unlocked_vault.add_entry(note_entry_1).is_ok());
+        let ne_2_id: Uuid = note_entry_2.id();
         assert!(unlocked_vault.add_entry(note_entry_2).is_ok());
 
         unlocked_vault.lock_and_save().unwrap();
+        [bp_1_id, bp_2_id, se_1_id, se_2_id, ne_1_id, ne_2_id]
     }
 
     fn get_empty_hoard(vault_dir: &TempDir) -> LockedHoard {
@@ -89,13 +94,27 @@ mod hoard_test {
         result.unwrap()
     }
 
-    fn get_filled_hoard(vault_dir: &TempDir) -> LockedHoard {
-        create_test_vault_with_entries(&vault_dir);
+    fn get_empty_unlocked_hoard(vault_dir: &TempDir) -> UnlockedHoard {
+        let locked_hoard = get_empty_hoard(&vault_dir);
+        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+        result.unwrap()
+    }
+
+    fn get_filled_hoard(vault_dir: &TempDir) -> (LockedHoard, [Uuid; 6]) {
+        let uuids = create_test_vault_with_entries(&vault_dir);
         let config = create_test_config(&vault_dir);
 
         let result = LockedHoard::load_hoard(config);
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
-        result.unwrap()
+        (result.unwrap(), uuids)
+    }
+
+    fn get_filled_unlocked_hoard(vault_dir: &TempDir) -> (UnlockedHoard, [Uuid; 6]) {
+        let (locked_hoard, uuids) = get_filled_hoard(&vault_dir);
+        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+        (result.unwrap(), uuids)
     }
 
     #[test]
@@ -156,12 +175,12 @@ mod hoard_test {
     #[test]
     fn open_exiting_filled_locked_hoard() {
         let vault_dir = tempdir().unwrap();
-        let locked_hoard = get_filled_hoard(&vault_dir);
+        let (locked_hoard, _) = get_filled_hoard(&vault_dir);
 
         let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let unlocked_hoard = result.unwrap();
-        assert!(unlocked_hoard.get_entries().len() == 6)
+        assert!(unlocked_hoard.get_entries().len() == 6);
     }
 
     #[test]
@@ -188,7 +207,7 @@ mod hoard_test {
     #[test]
     fn change_password_filled_hoard() {
         let vault_dir = tempdir().unwrap();
-        let mut locked_hoard = get_filled_hoard(&vault_dir);
+        let (mut locked_hoard, _) = get_filled_hoard(&vault_dir);
         let result = locked_hoard.change_password(Zeroizing::new(MASTER_PASSWORD.to_string()), Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
 
@@ -207,42 +226,91 @@ mod hoard_test {
 
     #[test]
     fn get_entries() {
+        let vault_dir = tempdir().unwrap();
+        let (unlocked_hoard, uuids) = get_filled_unlocked_hoard(&vault_dir);
 
+        let entries = unlocked_hoard.get_entries();
+        assert!(entries.len() == 6);
+        assert_eq!(entries[0].id(), uuids[0]);
+        assert_eq!(entries[1].id(), uuids[1]);
+        assert_eq!(entries[2].id(), uuids[2]);
+        assert_eq!(entries[3].id(), uuids[3]);
+        assert_eq!(entries[4].id(), uuids[4]);
+        assert_eq!(entries[5].id(), uuids[5]);
     }
 
     #[test]
     fn get_entries_of() {
+        let vault_dir = tempdir().unwrap();
+        let (unlocked_hoard, uuids) = get_filled_unlocked_hoard(&vault_dir);
 
+        let mut bp_itr = unlocked_hoard.get_entries_of::<BasicPasswordEntry>();
+        assert_eq!(bp_itr.next().unwrap().id(), uuids[0]);
+        assert_eq!(bp_itr.next().unwrap().id(), uuids[1]);
+        assert!(bp_itr.next().is_none());
+
+        let mut site_itr = unlocked_hoard.get_entries_of::<SiteEntry>();
+        assert_eq!(site_itr.next().unwrap().id(), uuids[2]);
+        assert_eq!(site_itr.next().unwrap().id(), uuids[3]);
+        assert!(site_itr.next().is_none());
+
+        let mut note_itr = unlocked_hoard.get_entries_of::<NoteEntry>();
+        assert_eq!(note_itr.next().unwrap().id(), uuids[4]);
+        assert_eq!(note_itr.next().unwrap().id(), uuids[5]);
+        assert!(note_itr.next().is_none());
     }
 
     #[test]
-    fn lock_in_mem() {
+    fn add_entry_lock_in_mem() {
+        let vault_dir = tempdir().unwrap();
+        Config::new(vault_dir.path().join(DEFAULT_VAULT_PATH), Argon2Conf::new(2048, 3, 1), UIConf::new(300)).unwrap();
+        let locked_hoard = LockedHoard::new_hoard(create_test_config(&vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
+        let mut unlocked_hoard = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 
+        let basic_password_entry = Entry::BasicPassword(BasicPasswordEntry::new(
+            Zeroizing::new("This Is The Vault Password".to_string()),
+            Zeroizing::new("Bubba Hotep".to_string()),
+            Zeroizing::new("secret123#!".to_string())
+        ).unwrap());
+        let result = unlocked_hoard.add_entry(basic_password_entry);
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+        let lock_result = unlocked_hoard.lock_in_mem();
+        assert!(lock_result.is_ok(), "expected Ok but got {:?}", result);
+
+        // only saved in meme so loadig it from storage should not have the entry in it.
+        let locked_hoard_reloaded = LockedHoard::load_hoard(create_test_config(&vault_dir)).unwrap();
+        let unlocked_hoard_reloaded = locked_hoard_reloaded.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
+        assert_eq!(unlocked_hoard_reloaded.get_entries().len(), 0);
     }
 
     #[test]
-    fn lock_and_save() {
+    fn add_entry_lock_and_save() {
+        let vault_dir = tempdir().unwrap();
+        Config::new(vault_dir.path().join(DEFAULT_VAULT_PATH), Argon2Conf::new(2048, 3, 1), UIConf::new(300)).unwrap();
+        let locked_hoard = LockedHoard::new_hoard(create_test_config(&vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
+        let mut unlocked_hoard = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 
-    }
+        let basic_password_entry = Entry::BasicPassword(BasicPasswordEntry::new(
+            Zeroizing::new("This Is The Vault Password".to_string()),
+            Zeroizing::new("Bubba Hotep".to_string()),
+            Zeroizing::new("secret123#!".to_string())
+        ).unwrap());
 
-    #[test]
-    fn add_entry() {
+        let result = unlocked_hoard.add_entry(basic_password_entry);
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+        let lock_result = unlocked_hoard.lock_and_save();
+        assert!(lock_result.is_ok(), "expected Ok but got {:?}", result);
 
-    }
-
-    #[test]
-    fn add_entry_exists() {
-
+        // check data was saved
+        let locked_hoard_reloaded = LockedHoard::load_hoard(create_test_config(&vault_dir)).unwrap();
+        let unlocked_hoard_reloaded = locked_hoard_reloaded.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
+        assert_eq!(unlocked_hoard_reloaded.get_entries().len(), 1);
     }
 
     #[test]
     fn delete_entry() {
         let vault_dir = tempdir().unwrap();
-        let locked_hoard = get_filled_hoard(&vault_dir);
-
-        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
-        assert!(result.is_ok(), "expected Ok but got {:?}", result);
-        let mut unlocked_hoard = result.unwrap();
+        let (mut unlocked_hoard, _) = get_filled_unlocked_hoard(&vault_dir);
 
         // After deleting, the vault makes no guarantee on order of the entries, so we get ALL uuids
         // first and will delete after.
@@ -261,11 +329,7 @@ mod hoard_test {
     #[test]
     fn delete_entry_not_found() {
         let vault_dir = tempdir().unwrap();
-        let locked_hoard = get_filled_hoard(&vault_dir);
-
-        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
-        assert!(result.is_ok(), "expected Ok but got {:?}", result);
-        let mut unlocked_hoard = result.unwrap();
+        let (mut unlocked_hoard, _) = get_filled_unlocked_hoard(&vault_dir);
 
         let option = unlocked_hoard.remove_entry(Uuid::new_v4());
         assert!(option.is_none(), "expected None but got {:?}", option);
