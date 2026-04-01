@@ -1,6 +1,6 @@
 use dirs::home_dir;
 use clap::{Parser,Subcommand};
-use dialoguer::{Password};
+use dialoguer::{Input, Password};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 use std::path::PathBuf;
@@ -17,11 +17,14 @@ const DEFAULT_UI_SESSION_TIMEOUT_SEC: u32 = 300;
 
 #[derive(Parser)]
 #[command(name = "frankshoard")]
-#[command(about = "A secure password manager")]
+#[command(about = "A secure password manager used to store secrets (password and notes) along with related data.")]
 struct Cli {
+    /// Path to the configuration file.  If not provided, will look for a configuration file in `~/.config/frankshoard/config.toml`.  If none
+    /// is found there, a config file with default values will be created there.
     #[arg(short, long)]
     config: Option<PathBuf>,
 
+    /// Supress all printouts beside essential outputs.
     #[arg(short, long)]
     silent: bool,
 
@@ -31,62 +34,94 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Creates a new vault at the path provided by the config.  Will fail if the file already exists.
     Init,
+
+    /// Add and entry to the vault.  Always prints the id of the new entry for future reference.
     Add {
         #[command(subcommand)]
         entry_type: AddCommands,
     },
+
+    /// List content (excluding secrets) of all entries stored in the vault.
     ListAll,
+
+    /// List content (excluding secrets) of all entries of a given type stored in the vault.
     List {
         #[command(subcommand)]
         entry_type: ListCommands,
     },
+
+    /// Remove the given entry from the vault.
     Remove {
         #[arg(long)]
-        uuid: Uuid,
+        id: Uuid,
     },
+
+    /// Prints the given entry (except sercrets)
     Entry{
         #[arg(long)]
-        uuid: Uuid,
+        id: Uuid,
     },
+
+    /// Prints username field of the given entry (if exists)
     EntryUsername{
         #[arg(long)]
-        uuid: Uuid,
+        id: Uuid,
     },
+
+    /// Prints password field of the given entry (if exists)
     EntryPassword{
         #[arg(long)]
-        uuid: Uuid,
+        id: Uuid,
     },
+
+    /// Prints note field of the given entry (if exists)
     EntryNote{
         #[arg(long)]
-        uuid: Uuid,
+        id: Uuid,
     },
+
+    /// Change the master password of the vault.
     ChangeMasterPassword,
 }
 
 #[derive(Subcommand, Debug)]
 enum AddCommands {
     BasicPassword {
+        /// A name for the entry
         #[arg(long)]
         entry_name: Zeroizing<String>,
+
+        /// The username for this set of credentials
         #[arg(long)]
         username: Zeroizing<String>,
     },
     Site {
+        /// A name for the entry
         #[arg(long)]
         entry_name: Zeroizing<String>,
+
+        /// The url to the site associated with this credential
         #[arg(long)]
         url: Url,
+
+        /// The username for this set of credentials
         #[arg(long)]
         username: Zeroizing<String>,
+
+        /// A secret note (optional)
         #[arg(long)]
         note: Option<Zeroizing<String>>,
     },
     Note {
+        /// A name for the entry
         #[arg(long)]
         entry_name: Zeroizing<String>,
+
+        /// A secret note
         #[arg(long)]
-        note: Zeroizing<String>,
+        note: Option<Zeroizing<String>>,
     },
 }
 
@@ -135,11 +170,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Add {entry_type} => add(unlocked_hoard, entry_type, silent),
         Commands::ListAll => list_all(unlocked_hoard, silent),
         Commands::List {entry_type} => list(unlocked_hoard, entry_type, silent),
-        Commands::Remove { uuid } => remove(unlocked_hoard, uuid, silent),
-        Commands::Entry { uuid } => entry(unlocked_hoard, uuid, silent),
-        Commands::EntryUsername { uuid } => entry_username(unlocked_hoard, uuid, silent),
-        Commands::EntryPassword { uuid } => entry_password(unlocked_hoard, uuid, silent),
-        Commands::EntryNote { uuid } => entry_note(unlocked_hoard, uuid, silent),
+        Commands::Remove { id } => remove(unlocked_hoard, id, silent),
+        Commands::Entry { id } => entry(unlocked_hoard, id, silent),
+        Commands::EntryUsername { id } => entry_username(unlocked_hoard, id, silent),
+        Commands::EntryPassword { id } => entry_password(unlocked_hoard, id, silent),
+        Commands::EntryNote { id } => entry_note(unlocked_hoard, id, silent),
     }
 }
 
@@ -211,7 +246,13 @@ fn add(mut unlocked_hoard: UnlockedHoard, entry_type: AddCommands, silent: bool)
             unlocked_hoard.add_entry(entry)?;
         },
         AddCommands::Note{entry_name, note} => {
-            let entry = Entry::Note(NoteEntry::new(entry_name, note)?);
+            let note_string = match note {
+                Some(n) => n,
+                None => Zeroizing::new(Input::new()
+                    .with_prompt("Please enter your secret note: ")
+                    .interact_text()?),
+            };
+            let entry = Entry::Note(NoteEntry::new(entry_name, note_string)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
         },

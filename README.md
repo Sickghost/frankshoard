@@ -57,18 +57,6 @@ Security decisions are documented here:
 
 ---
 
-## Architecture
-
-The project is structured around the following modules:
-
-- **config** — handles application configuration, paths, and user preferences
-- **vault** — core vault storage, entry management, and serialization 
-- **crypto** — cryptographic primitives: Argon2id key derivation and AES-GCM encryption/decryption 
-- **lib** — the public api
-- **cli** — command-line interface for interacting with the vault *(planned)*
-
----
-
 ## Motivation
 
 This project serves two purposes:
@@ -88,8 +76,8 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 - [x] AES-256-GCM encryption/decryption
 - [x] Public API layer (Master password change with vault re-encryption, list, add, delete, edit)
 - [x] CLI interface
-- [ ] Test Suite
-- [ ] Cleanup IO.  Add "silent mode", remove all none-essential printouts, add logging
+- [x] Add "silent mode"
+- [x] Integration Test Suite
 - [ ] Add a TUI (ratatui)
 - [ ] Add a threaded timer to manage master_key lifecycle. (tokio)
 
