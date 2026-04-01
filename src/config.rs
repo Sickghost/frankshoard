@@ -1,4 +1,7 @@
 use dirs::home_dir;
+use std::fs::OpenOptions;
+use std::os::unix::fs::OpenOptionsExt;
+use std::io::Write;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -71,7 +74,11 @@ impl Config {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(path, toml_str)?;
+
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&path)?;
+        file.write_all(toml_str.as_bytes())?;
+        drop(file);
+
         Ok(())
     }
 

@@ -231,6 +231,9 @@ mod hoard_test {
 
         let entries = unlocked_hoard.get_entries();
         assert!(entries.len() == 6);
+
+        // Note: this series of assertion work because no delete occures before.  If that was to change,
+        // the test would break because deleting enties will change the internal ordering of the vault.
         assert_eq!(entries[0].id(), uuids[0]);
         assert_eq!(entries[1].id(), uuids[1]);
         assert_eq!(entries[2].id(), uuids[2]);
@@ -263,7 +266,6 @@ mod hoard_test {
     #[test]
     fn add_entry_lock_in_mem() {
         let vault_dir = tempdir().unwrap();
-        Config::new(vault_dir.path().join(DEFAULT_VAULT_PATH), Argon2Conf::new(2048, 3, 1), UIConf::new(300)).unwrap();
         let locked_hoard = LockedHoard::new_hoard(create_test_config(&vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
         let mut unlocked_hoard = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 
@@ -277,7 +279,7 @@ mod hoard_test {
         let lock_result = unlocked_hoard.lock_in_mem();
         assert!(lock_result.is_ok(), "expected Ok but got {:?}", result);
 
-        // only saved in meme so loadig it from storage should not have the entry in it.
+        // only saved in memory so loading it from storage should not have the entry in it.
         let locked_hoard_reloaded = LockedHoard::load_hoard(create_test_config(&vault_dir)).unwrap();
         let unlocked_hoard_reloaded = locked_hoard_reloaded.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
         assert_eq!(unlocked_hoard_reloaded.get_entries().len(), 0);
@@ -286,7 +288,6 @@ mod hoard_test {
     #[test]
     fn add_entry_lock_and_save() {
         let vault_dir = tempdir().unwrap();
-        Config::new(vault_dir.path().join(DEFAULT_VAULT_PATH), Argon2Conf::new(2048, 3, 1), UIConf::new(300)).unwrap();
         let locked_hoard = LockedHoard::new_hoard(create_test_config(&vault_dir), Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
         let mut unlocked_hoard = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap();
 

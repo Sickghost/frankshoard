@@ -7,7 +7,6 @@ pub enum Error {
     VaultNotFound,
     EntryAlreadyExists,
     HomeDirectoryNotFound,
-    SecretTooLong,
     CorruptedSecret,
     Io(std::io::Error),
     Encryption(String),
@@ -29,7 +28,6 @@ impl std::fmt::Display for Error {
             Error::VaultNotFound => write!(f, "Vault not found"),
             Error::EntryAlreadyExists => write!(f, "Entry already exists in vault"),
             Error::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
-            Error::SecretTooLong => write!(f, "Error, the secret you are trying to create is too long."),
             Error::CorruptedSecret => write!(f, "Error, the secret could not be retrieved."),
             Error::Io(e) => write!(f, "IO error: {}", e),
             Error::Encryption(str) => write!(f, "Encryption error: {}", str),

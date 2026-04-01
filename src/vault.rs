@@ -317,10 +317,10 @@ impl VaultFile {
         let mut salt = [0u8; 32];
         crypto::fill_salt(&mut salt);
         let mut nonce = [0u8; 12];
-        crypto::fill_nonce(&mut nonce);
+        crypto::fill_nonce(&mut nonce); // Never actually used, but safer anyways and more future proof than not initializing
         Ok(VaultFile {
             salt,
-            nonce,  // Sure, never actually used, but safer anyways and more future proof than not initializing
+            nonce,
             ciphertext: Vec::new(),
         })
     }
