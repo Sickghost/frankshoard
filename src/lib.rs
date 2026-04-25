@@ -3,6 +3,7 @@ mod error;
 mod vault;
 mod crypto;
 mod secretbuf;
+mod writers;
 
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -111,17 +112,29 @@ impl LockedHoard {
     ///
     /// # Errors
     ///
+    /// Note that on any error, the vault state is preserve to what it was prior to the call.
+    ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing or serializing the vault entries during encryption/decrytion.
     /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting/encrypting the vault.
     /// Returns [`Error::Io`] if there is an issue persisting the vault  to storage.
     pub fn change_password(&mut self, password: Zeroizing<String>, new_password: Zeroizing<String>) -> Result<(), Error> {
-        let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
-        let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, self.vault_file.nonce(), self.vault_file.ciphertext())?;
+        let snapshot = self.vault_file.clone();
 
-        self.vault_file.update_salt();
-        let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
-        self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)?;
-        self.vault_file.save(self.config.vault_file())
+        // Making it "atomic"
+        let result = ( || -> Result<(), Error> {
+            let master_key = MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
+            let decrypted_vault = DecryptedVault::from_ciphertext(&master_key, self.vault_file.nonce(), self.vault_file.ciphertext())?;
+
+            self.vault_file.update_salt();
+            let new_master_key = MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
+            self.vault_file.update_ciphertext(&decrypted_vault, &new_master_key)?;
+            self.vault_file.save(self.config.vault_file())
+        })();
+
+        if result.is_err() {
+            self.vault_file = snapshot;
+        }
+        result
     }
 }
 

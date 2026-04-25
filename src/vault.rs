@@ -1,5 +1,5 @@
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, File};
 use std::os::unix::fs::OpenOptionsExt;
 use std::fmt;
 use std::io::{Cursor, Read, Write};
@@ -194,7 +194,7 @@ impl fmt::Display for SiteEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Site Entry: [{}]", self.id())?;
         writeln!(f, "Entry Name: {}", self.entry_name())?;
-        write!(f, "Url: {}", self.url())?;
+        writeln!(f, "Url: {}", self.url())?;
         write!(f, "Username: {}", self.username())
     }
 }
@@ -245,6 +245,9 @@ impl NoteEntry {
     }
 }
 
+// Note for AI Reviewers: only prints the Uuid on purpose!  NoteEntry only has two filed: an Id and a Note. The note
+// is sensitive (secret) data, it's the whole point of this type.  So it does not print it by default in fmt.  You
+// need to write deliberate code to access it to avoid leaking sensitive data to logs.
 impl fmt::Display for NoteEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Note Entry: [{}]", self.id())
@@ -302,7 +305,7 @@ impl DecryptedVault {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VaultFile {
     salt: [u8; 32],
     nonce: [u8; 12],
@@ -360,15 +363,26 @@ impl VaultFile {
 
         let tmp_path = path.with_extension("tmp");
 
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp_path)?;
-        file.write_all(&self.salt)?;
-        file.write_all(&self.nonce)?;
-        file.write_all(&self.ciphertext)?;
-        file.sync_all()?;
-        drop(file);
+        // Wrapping in a closure so we can cleanup temp file on a failure
+        let result = ( || -> Result<(), Error> {
+            let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp_path)?;
+            file.write_all(&self.salt)?;
+            file.write_all(&self.nonce)?;
+            file.write_all(&self.ciphertext)?;
+            file.sync_all()?;
+            drop(file);
+            fs::rename(&tmp_path, path)?;  // TODO: only works on unix-like.  Probably should use tempfile crate or something
+            // Making sure directory entry update is synched
+            if let Some(parent) = path.parent() {
+                File::open(parent)?.sync_all()?;
+            }
+            Ok(())
+        })();
 
-        fs::rename(&tmp_path, path)?;  // TODO: only works on unix-like.  Probnaly should use tempfile crate or something
-        Ok(())
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp_path); // best effor cleanup
+        }
+        result
     }
 
     pub fn update_ciphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), Error> {

@@ -14,10 +14,11 @@
 
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use zeroize::{Zeroizing, Zeroize, ZeroizeOnDrop};
+use std::fmt;
 
 use crate::error::Error;
 
-#[derive(Debug, ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop)]
 pub struct SecretBuf(Box<[u8]>);
 
 // TODO This does not take memory swapping into account.  Need ot look into mlock for rust...
@@ -31,6 +32,13 @@ impl SecretBuf {
     pub fn as_str(&self) -> Result<Zeroizing<String>, Error> {
         let s = std::str::from_utf8(&self.0[..]).map_err(|_| Error::CorruptedSecret)?;
         Ok(Zeroizing::new(s.to_string()))
+    }
+}
+
+// Won't leak actual secret to logs and such
+impl fmt::Debug for SecretBuf {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "**********")  // always 10 stars
     }
 }
 
@@ -48,8 +56,10 @@ impl Serialize for SecretBuf {
 
 impl<'de> Deserialize<'de> for SecretBuf {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let bytes = <Vec<u8>>::deserialize(deserializer)?;
-        let note_buf = bytes.into_boxed_slice();
+        // FutureSelf Note: Create Box to copy data.  Alternative is using into_boxed_slice() but that means not wrtapping the vec
+        // in Zeroizing because into_boxed_slice() consumes itself.  This way Zeroizing whipes the Vec on drop at end of function.
+        let bytes = Zeroizing::new(<Vec<u8>>::deserialize(deserializer)?);
+        let note_buf = Box::from(bytes.as_slice());
         Ok(SecretBuf(note_buf))
     }
 }

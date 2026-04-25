@@ -12,4 +12,4 @@ iterations = 3
 parallelism = 1
 
 [ui]
-master_pwd_timeout_seconds = 300
+session_timeout_seconds = 300

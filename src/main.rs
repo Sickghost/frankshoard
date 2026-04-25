@@ -24,7 +24,7 @@ struct Cli {
     #[arg(short, long)]
     config: Option<PathBuf>,
 
-    /// Supress all printouts beside essential outputs.
+    /// Supress all printouts beside essential outputs.  Uuids of entries still get printed out to enble scripting
     #[arg(short, long)]
     silent: bool,
 

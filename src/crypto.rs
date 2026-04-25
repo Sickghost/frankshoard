@@ -4,14 +4,24 @@ use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
 use argon2::{Argon2, Algorithm, Version, Params};
 use zeroize::Zeroizing;
 use std::time::Instant;
+use std::fmt;
 
 use crate::config::Config;
 use crate::error::Error;
 
-#[derive(Debug)]
 pub struct MasterKey {
     key: Zeroizing<Box<[u8]>>, // A box, because we want the key in the heap
     creation_time: Instant,  // TODO mechanism to handle that
+}
+
+// Won't leak actual secret to logs and such
+impl fmt::Debug for MasterKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MasterKey")
+            .field("key", &"**********")
+            .field("creation_time", &self.creation_time)
+            .finish()
+    }
 }
 
 impl MasterKey {
