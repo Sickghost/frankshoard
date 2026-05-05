@@ -1,0 +1,9 @@
+vault_file = "~/.frankshoard/test_vault.db"
+
+# Malformed, missing parallelism
+[argon2]
+memory = 2097152
+iterations = 3
+
+[ui]
+session_timeout_seconds = 300

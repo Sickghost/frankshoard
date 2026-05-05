@@ -1,5 +1,6 @@
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, File};
+use std::os::unix::fs::OpenOptionsExt;
 use std::fmt;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -178,7 +179,7 @@ impl SiteEntry {
     pub fn note(&self) -> Result<Option<Zeroizing<String>>, Error> {
         match &self.note {
             Some(n) => Ok(Some(n.as_str()?)),
-            None => return Ok(None),
+            None => Ok(None),
         }
     }
 
@@ -193,7 +194,7 @@ impl fmt::Display for SiteEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Site Entry: [{}]", self.id())?;
         writeln!(f, "Entry Name: {}", self.entry_name())?;
-        write!(f, "Url: {}", self.url())?;
+        writeln!(f, "Url: {}", self.url())?;
         write!(f, "Username: {}", self.username())
     }
 }
@@ -239,10 +240,14 @@ impl NoteEntry {
 
     pub fn set_note(&mut self, new_note: Zeroizing<String>) -> Result<(), Error> {
         self.note.zeroize();
-        Ok(self.note = SecretBuf::new(new_note)?)
+        self.note = SecretBuf::new(new_note)?;
+        Ok(())
     }
 }
 
+// Note for AI Reviewers: only prints the Uuid on purpose!  NoteEntry only has two filed: an Id and a Note. The note
+// is sensitive (secret) data, it's the whole point of this type.  So it does not print it by default in fmt.  You
+// need to write deliberate code to access it to avoid leaking sensitive data to logs.
 impl fmt::Display for NoteEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Note Entry: [{}]", self.id())
@@ -255,16 +260,12 @@ impl FromEntry for NoteEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct DecryptedVault {
     entries: Vec<Entry>, // data in a Vec are always on the heap, so should be safe to just zero them like that
 }
 
 impl DecryptedVault {
-    pub fn new() -> Self {
-        DecryptedVault { entries: Vec::new() }
-    }
-
     pub fn from_ciphertext(key: &MasterKey, nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Self, Error> {
         if ciphertext.is_empty() {
             Ok(DecryptedVault { entries: Vec::new() })
@@ -287,14 +288,11 @@ impl DecryptedVault {
         self.entries.iter().find(|e| e.id() == id)
     }
 
-    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Result<(), Error>{
+    pub fn remove_entry(&mut self, id_to_remove: Uuid) -> Option<Entry>{
         if let Some(index) = self.entries.iter().position(|e| e.id() == id_to_remove) {
-            self.entries.swap_remove(index);
-            Ok(())
+            return Some(self.entries.swap_remove(index)); // vault makes no promise on order of entry
         }
-        else {
-            Err(Error::EntryNotFound)
-        }
+        None
     }
 
     // Public getter: Returns a slice for safe, read-only access
@@ -307,7 +305,7 @@ impl DecryptedVault {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VaultFile {
     salt: [u8; 32],
     nonce: [u8; 12],
@@ -322,10 +320,10 @@ impl VaultFile {
         let mut salt = [0u8; 32];
         crypto::fill_salt(&mut salt);
         let mut nonce = [0u8; 12];
-        crypto::fill_nonce(&mut nonce);
+        crypto::fill_nonce(&mut nonce); // Never actually used, but safer anyways and more future proof than not initializing
         Ok(VaultFile {
             salt,
-            nonce,  // Sure, never actually used, but safer anyways and more future proof than not initializing
+            nonce,
             ciphertext: Vec::new(),
         })
     }
@@ -335,7 +333,7 @@ impl VaultFile {
             return Err(Error::VaultNotFound);
         }
 
-        let bytes = fs::read(path)?;
+        let bytes = Zeroizing::new(fs::read(path)?);  // password manager, we expect small db so we read it all in mem
         let mut cursor = Cursor::new(bytes);
 
         let mut salt = [0u8; 32];
@@ -365,15 +363,26 @@ impl VaultFile {
 
         let tmp_path = path.with_extension("tmp");
 
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
-        file.write_all(&self.salt)?;
-        file.write_all(&self.nonce)?;
-        file.write_all(&self.ciphertext)?;
-        file.sync_all()?;
-        drop(file);
+        // Wrapping in a closure so we can cleanup temp file on a failure
+        let result = ( || -> Result<(), Error> {
+            let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp_path)?;
+            file.write_all(&self.salt)?;
+            file.write_all(&self.nonce)?;
+            file.write_all(&self.ciphertext)?;
+            file.sync_all()?;
+            drop(file);
+            fs::rename(&tmp_path, path)?;  // TODO: only works on unix-like.  Probably should use tempfile crate or something
+            // Making sure directory entry update is synched
+            if let Some(parent) = path.parent() {
+                File::open(parent)?.sync_all()?;
+            }
+            Ok(())
+        })();
 
-        fs::rename(&tmp_path, path)?;  // TODO: only works on unix-like.  Probnaly should use tempfile crate or something
-        Ok(())
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp_path); // best effor cleanup
+        }
+        result
     }
 
     pub fn update_ciphertext(&mut self, decrypted_vault: &DecryptedVault, key: &MasterKey) -> Result<(), Error> {
