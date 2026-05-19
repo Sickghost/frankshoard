@@ -3,7 +3,6 @@ mod error;
 mod vault;
 mod crypto;
 mod secretbuf;
-mod writers;
 
 use uuid::Uuid;
 use zeroize::Zeroizing;
