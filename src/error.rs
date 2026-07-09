@@ -1,5 +1,5 @@
 /// Since this is a learning project, I chose to do the error boilerplate code
-/// manually rather then using `thiserror` to manage my lib errors.
+/// manually rather than using `thiserror` to manage my lib errors.
 
 #[derive(Debug)]
 pub enum Error {
@@ -27,7 +27,9 @@ impl std::fmt::Display for Error {
             Error::VaultAlreadyExists => write!(f, "Vault already exists"),
             Error::VaultNotFound => write!(f, "Vault not found"),
             Error::EntryAlreadyExists => write!(f, "Entry already exists in vault"),
-            Error::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
+            Error::HomeDirectoryNotFound => {
+                write!(f, "Unable to find home directory when building path")
+            }
             Error::CorruptedSecret => write!(f, "Error, the secret could not be retrieved."),
             Error::Io(e) => write!(f, "IO error: {}", e),
             Error::Encryption(str) => write!(f, "Encryption error: {}", str),

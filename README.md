@@ -1,4 +1,4 @@
-# frankshoard
+# Frankshoard
 
 A secure, offline password vault written in Rust.
 
@@ -8,13 +8,9 @@ A secure, offline password vault written in Rust.
 
 `frankshoard` is a local password manager built as a hands-on Rust learning project, with a deliberate focus on getting the security design right from the ground up. Rather than relying on external frameworks for the security-critical components, the vault is designed with well-understood, modern cryptographic primitives chosen for their security properties.
 
-The name is a portmanteau of *Frank* (the author) and *hoard* — a personal stash of secrets, kept offline and under your control.
-
 ---
 
 ## Building
-
-This has only been test on MacOS Sequoia so far. 
 
 ```bash
 git clone https://github.com/Sickghost/frankshoard
@@ -34,7 +30,7 @@ Assuming the binary is in your path, invoke help on it.
 frankshoard --help
 ```
 
-Note that when executing a command, by default it will look for a config file in `~/.config/frankshoard`.  You can provide a path to the config file via the cli.  If no configuration file are present, a default one is created.  The default setting uses just under 2 GiB (1953000 KiB) of memory to derive the key.  Even on a good computer this can take quite some time so you may want to change the default to something more reasonable.
+Note that when executing a command, by default it will look for a config file in `~/.config/frankshoard`.  You can provide a path to the config file via the cli. If no configuration file are present, a default one is created.  The default setting uses just under 2 GiB (1953000 KiB) of memory to derive the key. Even on a good computer this can take quite some time so you may want to change the default to something more reasonable.
 
 See `config/config.example.toml` to create and customize your own.
 
@@ -53,7 +49,7 @@ Security decisions are documented here:
 - A unique nonce is generated per encryption operation
 
 **Secrecy Crate**
-- The secrecy crate is not used by choice.  I may refactor that later.
+- The secrecy crate is not used by choice. I may refactor that later.
 
 ---
 
