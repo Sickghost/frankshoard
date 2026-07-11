@@ -11,7 +11,7 @@ pub use crate::config::{Argon2Conf, Config, UIConf};
 pub use crate::error::Error;
 pub use crate::vault::{BasicPasswordEntry, Entry, NoteEntry, SiteEntry};
 
-use crate::crypto::MasterKey;
+use crate::crypto::{MasterKey, SALT_LEN};
 use crate::vault::{DecryptedVault, FromEntry, VaultFile};
 
 /// An encrypted in-memory representation of a frankshoard vault.
@@ -20,6 +20,7 @@ use crate::vault::{DecryptedVault, FromEntry, VaultFile};
 pub struct LockedHoard {
     config: Config,
     vault_file: VaultFile,
+    salt: [u8; SALT_LEN],
 }
 
 impl LockedHoard {
@@ -39,8 +40,8 @@ impl LockedHoard {
     /// Returns [`Error::VaultNotFound`] if the file cannot be found.
     /// Returns [`Error::MalformedVault`] if there was a problem deserializing the file pointed by the provided path.
     pub fn load_hoard(config: Config) -> Result<Self, Error> {
-        let vault_file = VaultFile::from_path(config.vault_file())?;
-        Ok(LockedHoard { config, vault_file })
+        let (salt, vault_file) = VaultFile::from_path(config.vault_file())?;
+        Ok(LockedHoard { config, vault_file, salt })
     }
 
     /// Creates a new empty vault. Note that the vault file is persisted to
@@ -69,19 +70,13 @@ impl LockedHoard {
             return Err(Error::VaultAlreadyExists);
         }
 
-        let vault_file = VaultFile::build_new_vault(config.vault_file())?;
-        let mut locked_hoard = LockedHoard { config, vault_file };
-        let master_key = MasterKey::from_password(
-            &password,
-            &locked_hoard.vault_file.salt(),
-            &locked_hoard.config,
-        )?;
-        locked_hoard
-            .vault_file
-            .update_ciphertext(&DecryptedVault::default(), &master_key)?;
-        locked_hoard
-            .vault_file
-            .save(locked_hoard.config.vault_file())?;
+        let master_key = MasterKey::from_new_password(&password, &config)?;
+
+        let blob = crypto::encrypt_bytes(&master_key, vault::extra_aad(), &DecryptedVault::empty_vault().to_bytes()?)?;
+
+        let vault_file = VaultFile::build_new_vault(config.vault_file(), blob)?;
+        let locked_hoard = LockedHoard { config, vault_file, salt: master_key.salt};
+        locked_hoard.vault_file.save(&locked_hoard.salt, locked_hoard.config.vault_file())?;
         Ok(locked_hoard)
     }
 
@@ -128,20 +123,14 @@ impl LockedHoard {
 
         // Making it "atomic"
         let result = (|| -> Result<(), Error> {
-            let master_key =
-                MasterKey::from_password(&password, self.vault_file.salt(), &self.config)?;
-            let decrypted_vault = DecryptedVault::from_ciphertext(
-                &master_key,
-                self.vault_file.nonce(),
-                self.vault_file.ciphertext(),
+            let master_key = MasterKey::from_password_with_salt(&password, &self.config, self.salt)?;
+            let new_master_key = MasterKey::from_new_password(&new_password, &self.config)?;
+            let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), self.vault_file.blob())?;
+            self.vault_file.update_blob(
+                crypto::encrypt_bytes(&new_master_key, vault::extra_aad(), &clear_data)?
             )?;
-
-            self.vault_file.update_salt();
-            let new_master_key =
-                MasterKey::from_password(&new_password, self.vault_file.salt(), &self.config)?;
-            self.vault_file
-                .update_ciphertext(&decrypted_vault, &new_master_key)?;
-            self.vault_file.save(self.config.vault_file())
+            self.salt = new_master_key.salt;
+            self.vault_file.save(&self.salt, self.config.vault_file())
         })();
 
         if result.is_err() {
@@ -185,16 +174,9 @@ impl UnlockedHoard {
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decryption.
     /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
     fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
-        let master_key = MasterKey::from_password(
-            password,
-            &locked_hoard.vault_file.salt(),
-            &locked_hoard.config,
-        )?;
-        let decrypted_vault = DecryptedVault::from_ciphertext(
-            &master_key,
-            &locked_hoard.vault_file.nonce(),
-            &locked_hoard.vault_file.ciphertext(),
-        )?;
+        let master_key = MasterKey::from_password_with_salt(password, &locked_hoard.config, locked_hoard.salt)?;
+        let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), locked_hoard.vault_file.blob())?;
+        let decrypted_vault = DecryptedVault::from_bytes(clear_data)?;
 
         Ok(UnlockedHoard {
             config: locked_hoard.config,
@@ -220,11 +202,13 @@ impl UnlockedHoard {
     /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
     pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error> {
-        self.vault_file
-            .update_ciphertext(&self.decrypted_vault, &self.master_key)?;
+        self.vault_file.update_blob(
+            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
+        )?;
         Ok(LockedHoard {
             config: self.config,
             vault_file: self.vault_file,
+            salt: self.master_key.salt,
         })
     }
 
@@ -243,13 +227,14 @@ impl UnlockedHoard {
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
     /// Returns [`Error::Io`] if there is a problem writing file to storage.
     pub fn lock_and_save(mut self) -> Result<LockedHoard, Error> {
-        self.vault_file
-            .update_ciphertext(&self.decrypted_vault, &self.master_key)?;
-        self.vault_file.save(self.config.vault_file())?;
-
+        self.vault_file.update_blob(
+            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
+        )?;
+        self.vault_file.save(&self.master_key.salt, self.config.vault_file())?;
         Ok(LockedHoard {
             config: self.config,
             vault_file: self.vault_file,
+            salt: self.master_key.salt,
         })
     }
 

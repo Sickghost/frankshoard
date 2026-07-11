@@ -5,14 +5,24 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
+use std::sync::OnceLock;
 use std::path::Path;
 use url::Url;
 use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{self, MasterKey};
+use crate::crypto::{SALT_LEN};
 use crate::error::Error;
 use crate::secretbuf::SecretBuf;
+
+const MAGIC: &[u8; 4] = b"FKHD";
+const FORMAT_VERSION: u8 = 1;
+const HEADER_LEN: usize = MAGIC.len() + 1 + SALT_LEN; // magic + version + salt
+
+pub fn extra_aad() -> &'static [u8] {
+    static AAD: OnceLock<Vec<u8>> = OnceLock::new();
+    AAD.get_or_init(|| [MAGIC.as_slice(), &[FORMAT_VERSION]].concat())
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Entry {
@@ -286,20 +296,19 @@ pub struct DecryptedVault {
 }
 
 impl DecryptedVault {
-    pub fn from_ciphertext(
-        key: &MasterKey,
-        nonce: &[u8; 12],
-        ciphertext: &[u8],
-    ) -> Result<Self, Error> {
-        if ciphertext.is_empty() {
-            Ok(DecryptedVault {
-                entries: Vec::new(),
-            })
-        } else {
-            let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
-            let vault: DecryptedVault = from_bytes(&bytes)?;
-            Ok(vault)
-        }
+    pub fn from_bytes(bytes: Zeroizing<Vec<u8>>) -> Result<Self, Error> {
+        // let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
+        let vault: DecryptedVault = from_bytes(&bytes)?;
+        Ok(vault)
+    }
+
+    pub fn empty_vault()-> Self {
+        DecryptedVault { entries: Vec::new(), }
+    }
+
+    pub fn to_bytes(self) -> Result<Zeroizing<Vec<u8>>, Error> {
+        let clear_data = Zeroizing::new(to_allocvec(&self)?);
+        Ok(clear_data)
     }
 
     pub fn add_entry(&mut self, item: Entry) -> Result<(), Error> {
@@ -333,28 +342,20 @@ impl DecryptedVault {
 
 #[derive(Debug, Clone)]
 pub struct VaultFile {
-    salt: [u8; 32],
-    nonce: [u8; 12],
-    ciphertext: Vec<u8>,
+    blob: Vec<u8>,
 }
 
 impl VaultFile {
-    pub fn build_new_vault(path: &Path) -> Result<Self, Error> {
+    pub fn build_new_vault(path: &Path, blob: Vec<u8>) -> Result<Self, Error> {
         if path.try_exists()? {
             return Err(Error::VaultAlreadyExists);
         }
-        let mut salt = [0u8; 32];
-        crypto::fill_salt(&mut salt);
-        let mut nonce = [0u8; 12];
-        crypto::fill_nonce(&mut nonce); // Never actually used, but safer anyways and more future proof than not initializing
         Ok(VaultFile {
-            salt,
-            nonce,
-            ciphertext: Vec::new(),
+            blob,
         })
     }
 
-    pub fn from_path(path: &Path) -> Result<Self, Error> {
+    pub fn from_path(path: &Path) -> Result<([u8; SALT_LEN], Self), Error> {
         if !path.try_exists()? {
             return Err(Error::VaultNotFound);
         }
@@ -362,27 +363,36 @@ impl VaultFile {
         let bytes = Zeroizing::new(fs::read(path)?); // Password manager, we expect small db so we read it all in memory
         let mut cursor = Cursor::new(bytes);
 
-        let mut salt = [0u8; 32];
-        if let Err(e) = cursor.read_exact(&mut salt) {
-            return Err(Error::MalformedVault(e));
-        }
-        let mut nonce = [0u8; 12];
-        if let Err(e) = cursor.read_exact(&mut nonce) {
-            return Err(Error::MalformedVault(e));
-        }
-        let mut ciphertext = Vec::new();
-        if let Err(e) = cursor.read_to_end(&mut ciphertext) {
-            return Err(Error::MalformedVault(e));
+        let mut magic = [0u8; MAGIC.len()];
+        cursor.read_exact(&mut magic).map_err(Error::MalformedVault)?;
+        if &magic != MAGIC {
+            return Err(Error::InvalidFormat);
         }
 
-        Ok(VaultFile {
+        let mut format_version = [0u8; 1];
+        cursor.read_exact(&mut format_version).map_err(Error::MalformedVault)?;
+        if format_version[0] != FORMAT_VERSION {
+            return Err(Error::UnsupportedVersion(format_version[0]));
+        }
+
+        let mut salt = [0u8; SALT_LEN];
+        cursor.read_exact(&mut salt).map_err(Error::MalformedVault)?;
+
+        let mut blob = Vec::new();
+        cursor.read_to_end(&mut blob).map_err(Error::MalformedVault)?;
+        if blob.is_empty() {
+            return Err(Error::EmptyCipher);
+        }
+
+        Ok((
             salt,
-            nonce,
-            ciphertext,
-        })
+            VaultFile {
+                blob,
+            },
+        ))
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), Error> {
+    pub fn save(&self, salt: &[u8; SALT_LEN], path: &Path) -> Result<(), Error> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -397,9 +407,14 @@ impl VaultFile {
                 .truncate(true)
                 .mode(0o600)
                 .open(&tmp_path)?;
-            file.write_all(&self.salt)?;
-            file.write_all(&self.nonce)?;
-            file.write_all(&self.ciphertext)?;
+            let mut header = Vec::with_capacity(HEADER_LEN);
+            header.extend_from_slice(MAGIC);
+            header.push(FORMAT_VERSION);
+            header.extend_from_slice(salt);
+            debug_assert_eq!(header.len(), HEADER_LEN);
+
+            file.write_all(&header)?;
+            file.write_all(&self.blob)?;
             file.sync_all()?;
             drop(file);
             fs::rename(&tmp_path, path)?; // TODO: only works on unix-like. Probably should use tempfile crate or something
@@ -416,33 +431,18 @@ impl VaultFile {
         result
     }
 
-    pub fn update_ciphertext(
+    pub fn update_blob(
         &mut self,
-        decrypted_vault: &DecryptedVault,
-        key: &MasterKey,
+        blob: Vec<u8>,
     ) -> Result<(), Error> {
-        let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
-        crypto::fill_nonce(&mut self.nonce);
-        self.ciphertext = crypto::encrypt_bytes(key, &self.nonce, &clear_data)?;
+        // let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
+        // crypto::fill_nonce(&mut self.nonce);
+        // self.ciphertext = crypto::encrypt_bytes(key, &self.nonce, &clear_data)?;
+        self.blob = blob;
         Ok(())
     }
 
-    pub fn salt(&self) -> &[u8; 32] {
-        &self.salt
-    }
-
-    /// Make sure you generate a new master_key and use it to update the ciphertext before saving the vault
-    /// or you won't be able to decrypt it anymore.
-    /// This is intended to be used when the password is changed.
-    pub fn update_salt(&mut self) {
-        crypto::fill_salt(&mut self.salt);
-    }
-
-    pub fn nonce(&self) -> &[u8; 12] {
-        &self.nonce
-    }
-
-    pub fn ciphertext(&self) -> &[u8] {
-        &self.ciphertext
+    pub fn blob(&self) -> &[u8] {
+        &self.blob
     }
 }
