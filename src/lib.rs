@@ -74,8 +74,8 @@ impl LockedHoard {
 
         let blob = crypto::encrypt_bytes(&master_key, vault::extra_aad(), &DecryptedVault::empty_vault().to_bytes()?)?;
 
-        let vault_file = VaultFile::build_new_vault(config.vault_file(), blob)?;
-        let locked_hoard = LockedHoard { config, vault_file, salt: master_key.salt};
+        let vault_file = VaultFile::build_new_vault(blob);
+        let locked_hoard = LockedHoard { config, vault_file, salt: master_key.salt()};
         locked_hoard.vault_file.save(&locked_hoard.salt, locked_hoard.config.vault_file())?;
         Ok(locked_hoard)
     }
@@ -109,7 +109,7 @@ impl LockedHoard {
     ///
     /// # Errors
     ///
-    /// Note that on any error, the vault state is preserve to what it was prior to the call.
+    /// Note that on any error, the vault state is preserved to what it was prior to the call.
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing or serializing the vault entries during encryption/decryption.
     /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting/encrypting the vault.
@@ -128,8 +128,8 @@ impl LockedHoard {
             let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), self.vault_file.blob())?;
             self.vault_file.update_blob(
                 crypto::encrypt_bytes(&new_master_key, vault::extra_aad(), &clear_data)?
-            )?;
-            self.salt = new_master_key.salt;
+            );
+            self.salt = new_master_key.salt();
             self.vault_file.save(&self.salt, self.config.vault_file())
         })();
 
@@ -167,7 +167,7 @@ impl UnlockedHoard {
     ///
     /// # Returns
     ///
-    /// Returns a [`UnlockedHoard`] with all entries decrypted. Note the return vault was NOT saved to storage.
+    /// Returns a [`UnlockedHoard`] with all entries decrypted. Note the returned vault was NOT saved to storage.
     ///
     /// # Errors
     ///
@@ -188,14 +188,14 @@ impl UnlockedHoard {
 
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
     /// Importantly, this does NOT persist the changes to file. The intent of this method is to
-    /// wipe sensitive data from memory while maintaining a reference to the [`LockedVault`]. It's intended
+    /// wipe sensitive data from memory while maintaining a reference to the [`LockedHoard`]. It's intended
     /// for use after read operations. This method consumes the `UnlockedHoard` to force the state change,
     /// also forcing sensitive data to be zeroed out.
-    /// See also [`lock_and_save`]
+    /// See also [`Self::lock_and_save`]
     ///
     /// # Returns
     ///
-    /// Returns a [`LockedHoard`] with an updated ciphertext. Note the return vault was NOT saved to storage.
+    /// Returns a [`LockedHoard`] with an updated ciphertext. Note the returned vault was NOT saved to storage.
     ///
     /// # Errors
     ///
@@ -204,18 +204,18 @@ impl UnlockedHoard {
     pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error> {
         self.vault_file.update_blob(
             crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
-        )?;
+        );
         Ok(LockedHoard {
             config: self.config,
             vault_file: self.vault_file,
-            salt: self.master_key.salt,
+            salt: self.master_key.salt(),
         })
     }
 
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
     /// The vault is also persisted to storage. This method consumes the `UnlockedHoard`
     /// to force the state change, also forcing sensitive data to be zeroed out.
-    /// See also [`lock_in_mem`]
+    /// See also [`Self::lock_in_mem`]
     ///
     /// # Returns
     ///
@@ -229,12 +229,12 @@ impl UnlockedHoard {
     pub fn lock_and_save(mut self) -> Result<LockedHoard, Error> {
         self.vault_file.update_blob(
             crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
-        )?;
-        self.vault_file.save(&self.master_key.salt, self.config.vault_file())?;
+        );
+        self.vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
         Ok(LockedHoard {
             config: self.config,
             vault_file: self.vault_file,
-            salt: self.master_key.salt,
+            salt: self.master_key.salt(),
         })
     }
 

@@ -29,7 +29,7 @@ struct Cli {
     #[arg(short, long)]
     config: Option<PathBuf>,
 
-    /// Suppress all printouts beside essential outputs. Uuids of entries still get printed out to enble scripting
+    /// Suppress all printouts beside essential outputs. Uuids of entries still get printed out to enable scripting
     #[arg(short, long)]
     silent: bool,
 
@@ -42,7 +42,7 @@ enum Commands {
     /// Creates a new vault at the path provided by the config. Will fail if the file already exists.
     Init,
 
-    /// Add and entry to the vault. Always prints the id of the new entry for future reference.
+    /// Add an entry to the vault. Always prints the id of the new entry for future reference.
     Add {
         #[command(subcommand)]
         entry_type: AddCommands,
@@ -183,7 +183,7 @@ fn init(config: Config, silent: bool) -> Result<(), Box<dyn std::error::Error>> 
     // Ask for password
     if !silent {
         println!(
-            "A new vault needs a master password.  Chose it and record it safely and carefully, if you lose your master password, there is no way to retrieve it."
+            "A new vault needs a master password.  Choose it and record it safely and carefully, if you lose your master password, there is no way to retrieve it."
         );
     }
     let password = Zeroizing::new(

@@ -346,13 +346,10 @@ pub struct VaultFile {
 }
 
 impl VaultFile {
-    pub fn build_new_vault(path: &Path, blob: Vec<u8>) -> Result<Self, Error> {
-        if path.try_exists()? {
-            return Err(Error::VaultAlreadyExists);
-        }
-        Ok(VaultFile {
+    pub fn build_new_vault(blob: Vec<u8>) -> Self {
+        VaultFile {
             blob,
-        })
+        }
     }
 
     pub fn from_path(path: &Path) -> Result<([u8; SALT_LEN], Self), Error> {
@@ -360,7 +357,7 @@ impl VaultFile {
             return Err(Error::VaultNotFound);
         }
 
-        let bytes = Zeroizing::new(fs::read(path)?); // Password manager, we expect small db so we read it all in memory
+        let bytes = fs::read(path)?; // Password manager, we expect small db so we read it all in memory
         let mut cursor = Cursor::new(bytes);
 
         let mut magic = [0u8; MAGIC.len()];
@@ -431,15 +428,8 @@ impl VaultFile {
         result
     }
 
-    pub fn update_blob(
-        &mut self,
-        blob: Vec<u8>,
-    ) -> Result<(), Error> {
-        // let clear_data: Zeroizing<Vec<u8>> = Zeroizing::new(to_allocvec(&decrypted_vault)?);
-        // crypto::fill_nonce(&mut self.nonce);
-        // self.ciphertext = crypto::encrypt_bytes(key, &self.nonce, &clear_data)?;
+    pub fn update_blob(&mut self, blob: Vec<u8>) -> () {
         self.blob = blob;
-        Ok(())
     }
 
     pub fn blob(&self) -> &[u8] {

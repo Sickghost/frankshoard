@@ -16,7 +16,7 @@ const TAG_LEN: usize = 16;   // AES-GCM authentication tag (128-bit)
 
 pub struct MasterKey {
     key: Zeroizing<Box<[u8]>>, // A box, because we want the key in the heap
-    pub salt: [u8; SALT_LEN],
+    salt: [u8; SALT_LEN],
     creation_time: Instant,    // TODO mechanism to handle that
 }
 
@@ -65,13 +65,17 @@ impl MasterKey {
         fill_salt(&mut salt);
         MasterKey::from_password_with_salt(password, config, salt)
     }
+
+    pub(crate) fn salt(&self) -> [u8;SALT_LEN] {
+        self.salt
+    }
 }
 
-pub fn fill_salt(salt: &mut [u8; SALT_LEN]) {
+fn fill_salt(salt: &mut [u8; SALT_LEN]) {
     OsRng.fill_bytes(salt);
 }
 
-pub fn fill_nonce(nonce_bytes: &mut [u8; NONCE_LEN]) {
+fn fill_nonce(nonce_bytes: &mut [u8; NONCE_LEN]) {
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
     nonce_bytes.copy_from_slice(nonce.as_slice());
 }
