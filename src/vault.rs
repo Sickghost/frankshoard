@@ -297,7 +297,6 @@ pub struct DecryptedVault {
 
 impl DecryptedVault {
     pub fn from_bytes(bytes: Zeroizing<Vec<u8>>) -> Result<Self, Error> {
-        // let bytes = crypto::decrypt_bytes(key, nonce, ciphertext)?;
         let vault: DecryptedVault = from_bytes(&bytes)?;
         Ok(vault)
     }
@@ -428,7 +427,7 @@ impl VaultFile {
         result
     }
 
-    pub fn update_blob(&mut self, blob: Vec<u8>) -> () {
+    pub fn update_blob(&mut self, blob: Vec<u8>) {
         self.blob = blob;
     }
 
