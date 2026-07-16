@@ -48,6 +48,9 @@ Security decisions are documented here:
 - AES-GCM provides both confidentiality and integrity — any tampering with the ciphertext is detectable
 - A unique nonce is generated per encryption operation
 
+The nonce is handle by the encryption/decryption algorithm.  It is prepended to the encrypted data and is part
+of the blob returned by the encryption function.  This way, it is entorely managed by crypto.rs and it becomes easier to insure that it is only ever used once.
+
 **Secrecy Crate**
 - The secrecy crate is not used by choice. I may refactor that later.
 
