@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod hoard_test {
     use tempfile::{TempDir, tempdir};
+    use std::fs;
+    use std::fs::File;
     use url::Url;
     use uuid::Uuid;
     use zeroize::Zeroizing;
@@ -10,7 +12,7 @@ mod hoard_test {
     const MASTER_PASSWORD: &str = "q0w1e2r3t4y5u6i7o8p9a;s,d.f!g@h#j$k%lˆz&x*c(v)b-n_m=Q+W<E>R?T/Y\"U\\I|O[A]S{D}F~G`H'J KLZXCVBNM";
     const NEW_MASTER_PASSWORD: &str = "somepassword";
     const WRONG_PASSWORD: &str = "ThisIsAlwaysTheWrongPassword";
-    const DEFAULT_VAULT_PATH: &str = ".frankshoard/vault.db";
+    const DEFAULT_VAULT_PATH: &str = "vault.db";
 
     fn create_test_config(vault_dir: &TempDir) -> Config {
         let vault_file_path = vault_dir.path().join(DEFAULT_VAULT_PATH);
@@ -176,20 +178,87 @@ mod hoard_test {
         assert!(matches!(err, Error::VaultNotFound));
     }
 
-    /// TODO:  We need new test, temporarily fix this one so I can commit
-    /// Note that right now, because of the implementation, this would only trigger on a vault that is less than 44 bytes
-    /// long (the salt + nonce). Anything else will deserialize. Aes-gcm will later complain if the entries have been tempered
-    /// with. Only exception is if someone edited the vault and truncated it to only leave the salt and nonce. Then it will decrypt
-    /// as an empty vault.
     #[test]
     fn unlock_hoard_malformed_vault() {
-        let vault_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/test_data/malformed_vault.db");
-        let config =
-            Config::new(vault_path, Argon2Conf::new(195300, 3, 1), UIConf::new(300)).unwrap();
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+        File::options().write(true).open(&config.vault_file()).unwrap().set_len(4).unwrap(); // truncating to MAGIC length
 
         let err = LockedHoard::load_hoard(config).unwrap_err();
-        assert!(matches!(err, Error::InvalidFormat));
+        assert!(matches!(err, Error::MalformedVault(..)), "got: {err:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_noblob_vault() {
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+        File::options().write(true).open(&config.vault_file()).unwrap().set_len(37).unwrap(); // Truncate after header
+
+        let err = LockedHoard::load_hoard(config).unwrap_err();
+        assert!(matches!(err, Error::EmptyCipher), "got: {err:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_emptyvaulttooshort_vault() {
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+        File::options().write(true).open(&config.vault_file()).unwrap().set_len(55).unwrap(); // blob = 18 bytes, below NONCE_LEN + TAG_LEN minimum
+
+        let locked = LockedHoard::load_hoard(config).unwrap();
+        let err = locked.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap_err();
+        assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_badmagic_vault() {
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+
+        // Corrupting the magic
+        let path = config.vault_file();
+        let mut bytes = std::fs::read(path).unwrap();
+        bytes[0] ^= 0xFF;
+        std::fs::write(path, &bytes).unwrap();
+
+        let err = LockedHoard::load_hoard(config).unwrap_err();
+        assert!(matches!(err, Error::InvalidFormat), "got: {err:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_badformatversion_vault() {
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+
+        // Setting unsupported format version
+        let path = config.vault_file();
+        let mut bytes = std::fs::read(path).unwrap();
+        bytes[4] = 0xFF;
+        std::fs::write(path, &bytes).unwrap();
+
+        let err = LockedHoard::load_hoard(config).unwrap_err();
+        assert!(matches!(err, Error::UnsupportedVersion(..)), "got: {err:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_badsalt_vault() {
+        let vault_dir = tempdir().unwrap();
+        create_test_empty_vault(&vault_dir);
+        let config = create_test_config(&vault_dir);
+
+        // Flipping one byte in the salt
+        let path = config.vault_file();
+        let mut bytes = std::fs::read(path).unwrap();
+        bytes[20] ^= 0xFF;
+        std::fs::write(path, &bytes).unwrap();
+
+        let locked = LockedHoard::load_hoard(config).unwrap();
+        let err = locked.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap_err();
+        assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
     }
 
     #[test]
@@ -250,13 +319,8 @@ mod hoard_test {
         );
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
 
-        let test_new_pwd_result =
-            locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
-        assert!(
-            test_new_pwd_result.is_ok(),
-            "expected Ok but got {:?}",
-            result
-        );
+        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", test_new_pwd_result);
     }
 
     #[test]
@@ -269,13 +333,8 @@ mod hoard_test {
         );
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
 
-        let test_new_pwd_result =
-            locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
-        assert!(
-            test_new_pwd_result.is_ok(),
-            "expected Ok but got {:?}",
-            result
-        );
+        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", test_new_pwd_result);
     }
 
     #[test]
@@ -294,6 +353,39 @@ mod hoard_test {
             )
             .unwrap_err();
         assert!(matches!(err, Error::Encryption(_)));
+    }
+
+    #[test]
+    fn change_password_failed_save_preserve_old_vault() {
+        let vault_dir = tempdir().unwrap();
+
+        let mut locked_hoard = LockedHoard::new_hoard(
+            create_test_config(&vault_dir),
+            Zeroizing::new(MASTER_PASSWORD.to_string()),
+        ).unwrap();
+
+        // make the DIRECTORY read-only so save fails.  Directory, not file since we use an intermediate file  when saving.
+        let mut perms = fs::metadata(vault_dir.path()).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(vault_dir.path(), perms).unwrap();
+
+        // change password
+        let result = locked_hoard.change_password(
+            Zeroizing::new(MASTER_PASSWORD.to_string()),
+            Zeroizing::new(NEW_MASTER_PASSWORD.to_string()),
+        );
+
+        // restore write access
+        let mut perms = fs::metadata(vault_dir.path()).unwrap().permissions();
+        perms.set_readonly(false);
+        fs::set_permissions(vault_dir.path(), perms).unwrap();
+
+        // Check save failed and old password still works
+        assert!(matches!(result.unwrap_err(), Error::Io(..)));
+
+        let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+
     }
 
     #[test]
@@ -358,7 +450,7 @@ mod hoard_test {
         let result = unlocked_hoard.add_entry(basic_password_entry);
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let lock_result = unlocked_hoard.lock_in_mem();
-        assert!(lock_result.is_ok(), "expected Ok but got {:?}", result);
+        assert!(lock_result.is_ok(), "expected Ok but got {:?}", lock_result);
 
         // Only saved in memory so loading it from storage should not have the entry in it.
         let locked_hoard_reloaded =
@@ -393,7 +485,7 @@ mod hoard_test {
         let result = unlocked_hoard.add_entry(basic_password_entry);
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let lock_result = unlocked_hoard.lock_and_save();
-        assert!(lock_result.is_ok(), "expected Ok but got {:?}", result);
+        assert!(lock_result.is_ok(), "expected Ok but got {:?}", lock_result);
 
         // check data was saved
         let locked_hoard_reloaded =

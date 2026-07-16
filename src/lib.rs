@@ -39,6 +39,9 @@ impl LockedHoard {
     /// Returns [`Error::Io`] If there is an issue accessing the filesystem.
     /// Returns [`Error::VaultNotFound`] if the file cannot be found.
     /// Returns [`Error::MalformedVault`] if there was a problem deserializing the file pointed by the provided path.
+    /// Returns [`Error::InvalidFormat`] if the file magic is bad.
+    /// Returns [`Error::UnsupportedVersion`] if the file fomrat version is unsupported.
+    /// Returns [`Error::EmptyCipher`] if an empty hoard is badly formed for the cipher used.
     pub fn load_hoard(config: Config) -> Result<Self, Error> {
         let (salt, vault_file) = VaultFile::from_path(config.vault_file())?;
         Ok(LockedHoard { config, vault_file, salt })
@@ -64,7 +67,9 @@ impl LockedHoard {
     /// # Errors
     ///
     /// Returns [`Error::VaultAlreadyExists`] if a vault file already exists at the configured path.
-    /// Returns [`Error::Io`] if there is an issue reading the vault file
+    /// Returns [`Error::Io`] if there is an issue checking for or writing the vault file to storage.
+    /// Returns [`Error::Encryption`] if there is an encryption problem creating a new empty vault.
+    /// Returns [`Error::BinarySerdeError`] if a problem occure trying to serialize the new hoard.
     pub fn new_hoard(config: Config, password: Zeroizing<String>) -> Result<Self, Error> {
         if config.vault_file().try_exists()? {
             return Err(Error::VaultAlreadyExists);
@@ -100,7 +105,7 @@ impl LockedHoard {
     }
 
     /// Decrypt the vault with the `password` and then re-encrypted it using `new_password` and a new salt before persisting it to
-    /// storage again.
+    /// storage again.  The raw decrypted bytes live in memory for a short time but they are never deserialized.
     ///
     /// # Arguments
     ///
@@ -111,7 +116,6 @@ impl LockedHoard {
     ///
     /// Note that on any error, the vault state is preserved to what it was prior to the call.
     ///
-    /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing or serializing the vault entries during encryption/decryption.
     /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting/encrypting the vault.
     /// Returns [`Error::Io`] if there is an issue persisting the vault to storage.
     pub fn change_password(
@@ -126,11 +130,10 @@ impl LockedHoard {
             let master_key = MasterKey::from_password_with_salt(&password, &self.config, self.salt)?;
             let new_master_key = MasterKey::from_new_password(&new_password, &self.config)?;
             let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), self.vault_file.blob())?;
-            self.vault_file.update_blob(
-                crypto::encrypt_bytes(&new_master_key, vault::extra_aad(), &clear_data)?
-            );
-            self.salt = new_master_key.salt();
-            self.vault_file.save(&self.salt, self.config.vault_file())
+            self.vault_file.update_blob(crypto::encrypt_bytes(&new_master_key, vault::extra_aad(), &clear_data)?);
+            self.vault_file.save(&new_master_key.salt(), self.config.vault_file())?;
+            self.salt = new_master_key.salt(); // Only keep on success
+            Ok(())
         })();
 
         if result.is_err() {
