@@ -77,7 +77,7 @@ impl LockedHoard {
 
         let master_key = MasterKey::from_new_password(&password, &config)?;
 
-        let blob = crypto::encrypt_bytes(&master_key, vault::extra_aad(), &DecryptedVault::empty_vault().to_bytes()?)?;
+        let blob = crypto::encrypt_bytes(&master_key, vault::extra_aad(), &DecryptedVault::empty_vault().into_bytes()?)?;
 
         let vault_file = VaultFile::build_new_vault(blob);
         let locked_hoard = LockedHoard { config, vault_file, salt: master_key.salt()};
@@ -206,7 +206,7 @@ impl UnlockedHoard {
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
     pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error> {
         self.vault_file.update_blob(
-            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
+            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.into_bytes()?)?
         );
         Ok(LockedHoard {
             config: self.config,
@@ -231,7 +231,7 @@ impl UnlockedHoard {
     /// Returns [`Error::Io`] if there is a problem writing file to storage.
     pub fn lock_and_save(mut self) -> Result<LockedHoard, Error> {
         self.vault_file.update_blob(
-            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.to_bytes()?)?
+            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.into_bytes()?)?
         );
         self.vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
         Ok(LockedHoard {

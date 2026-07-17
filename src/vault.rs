@@ -52,7 +52,7 @@ impl fmt::Display for Entry {
 }
 
 pub trait FromEntry {
-    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self>;
+    fn from_entry(entry: &Entry) -> Option<&Self>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -121,7 +121,7 @@ impl fmt::Display for BasicPasswordEntry {
 }
 
 impl FromEntry for BasicPasswordEntry {
-    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self> {
+    fn from_entry(entry: &Entry) -> Option<&Self> {
         if let Entry::BasicPassword(b) = entry {
             Some(b)
         } else {
@@ -222,7 +222,7 @@ impl fmt::Display for SiteEntry {
 }
 
 impl FromEntry for SiteEntry {
-    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self> {
+    fn from_entry(entry: &Entry) -> Option<&Self> {
         if let Entry::Site(s) = entry {
             Some(s)
         } else {
@@ -281,7 +281,7 @@ impl fmt::Display for NoteEntry {
 }
 
 impl FromEntry for NoteEntry {
-    fn from_entry<'a>(entry: &'a Entry) -> Option<&'a Self> {
+    fn from_entry(entry: &Entry) -> Option<&Self> {
         if let Entry::Note(n) = entry {
             Some(n)
         } else {
@@ -305,7 +305,7 @@ impl DecryptedVault {
         DecryptedVault { entries: Vec::new(), }
     }
 
-    pub fn to_bytes(self) -> Result<Zeroizing<Vec<u8>>, Error> {
+    pub fn into_bytes(self) -> Result<Zeroizing<Vec<u8>>, Error> {
         let clear_data = Zeroizing::new(to_allocvec(&self)?);
         Ok(clear_data)
     }

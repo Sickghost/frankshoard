@@ -75,7 +75,7 @@ impl Config {
             fs::create_dir_all(parent)?;
         }
 
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&path)?;
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
         file.write_all(toml_str.as_bytes())?;
         drop(file);
 

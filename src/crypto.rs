@@ -89,7 +89,7 @@ pub fn encrypt_bytes(
     fill_nonce(&mut nonce_byte);
 
     let key = Key::<Aes256Gcm>::from_slice(&master_key.key);
-    let cipher = Aes256Gcm::new(&key);
+    let cipher = Aes256Gcm::new(key);
 
     let nonce = Nonce::from_slice(&nonce_byte);
     let aad: Vec<u8> = [extra_aad, master_key.salt.as_slice()].concat();
@@ -111,7 +111,7 @@ pub fn decrypt_bytes(
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_LEN);
 
     let key = Key::<Aes256Gcm>::from_slice(&master_key.key);
-    let cipher = Aes256Gcm::new(&key);
+    let cipher = Aes256Gcm::new(key);
 
     let nonce = Nonce::from_slice(nonce_bytes);
     let aad: Vec<u8> = [extra_aad, master_key.salt.as_slice()].concat();

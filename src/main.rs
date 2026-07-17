@@ -123,10 +123,6 @@ enum AddCommands {
         /// A name for the entry
         #[arg(long)]
         entry_name: Zeroizing<String>,
-
-        /// A secret note
-        #[arg(long)]
-        note: Option<Zeroizing<String>>,
     },
 }
 
@@ -267,15 +263,10 @@ fn add(
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
         }
-        AddCommands::Note { entry_name, note } => {
-            let note_string = match note {
-                Some(n) => n,
-                None => Zeroizing::new(
-                    Input::new()
-                        .with_prompt("Please enter your secret note: ")
-                        .interact_text()?,
-                ),
-            };
+        AddCommands::Note { entry_name } => {
+            let note_string = Zeroizing::new(
+                Input::new().with_prompt("Please enter your secret note: ").interact_text()?
+                );
             let entry = Entry::Note(NoteEntry::new(entry_name, note_string)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
@@ -447,13 +438,13 @@ fn build_config(config_path: Option<PathBuf>) -> Result<Config, Error> {
 
     let config_path = match config_path {
         Some(p) => p,
-        None => PathBuf::from(home.join(DEFAULT_CONFIG_PATH)),
+        None => home.join(DEFAULT_CONFIG_PATH),
     };
 
     if config_path.try_exists()? {
         Config::from_path(&config_path)
     } else {
-        let default_vault_file = PathBuf::from(home.join(DEFAULT_VAULT_PATH));
+        let default_vault_file = home.join(DEFAULT_VAULT_PATH);
         let default_argon2 = Argon2Conf::new(
             DEFAULT_ARGON2_MEMORY,
             DEFAULT_ARGON2_ITR,
