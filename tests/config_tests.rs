@@ -2,11 +2,12 @@
 mod hoard_test {
     use dirs::home_dir;
 
-    use frankshoard::*;  // imports everything from the public api
+    use frankshoard::*; // Imports everything from the public API
 
     #[test]
     fn config_from_existing_file() {
-        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data/config.toml");
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/test_data/config.toml");
         let result = Config::from_path(&config_path);
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let config = result.unwrap();
@@ -24,16 +25,17 @@ mod hoard_test {
 
     #[test]
     fn config_from_malformed_file() {
-        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data/bad_config.toml");
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/test_data/bad_config.toml");
         let err = Config::from_path(&config_path).unwrap_err();
         assert!(matches!(err, Error::TomlError(_)));
     }
 
     #[test]
     fn config_from_missing_file() {
-        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test_data/no_such_file.toml");
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/test_data/no_such_file.toml");
         let err = Config::from_path(&config_path).unwrap_err();
         assert!(matches!(err, Error::Io(_)));
     }
-
 }

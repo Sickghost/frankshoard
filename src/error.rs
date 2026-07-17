@@ -1,5 +1,5 @@
 /// Since this is a learning project, I chose to do the error boilerplate code
-/// manually rather then using `thiserror` to manage my lib errors.
+/// manually rather than using `thiserror` to manage my lib errors.
 
 #[derive(Debug)]
 pub enum Error {
@@ -11,12 +11,15 @@ pub enum Error {
     Io(std::io::Error),
     Encryption(String),
     MalformedVault(std::io::Error),
+    InvalidFormat,
+    UnsupportedVersion(u8),
     MasterPasswordError(String),
     TomlError(String),
     UrlParseError(url::ParseError),
     BinarySerdeError(postcard::Error),
     IllegalState(String),
     NotImplemented(String),
+    EmptyCipher,
 }
 
 impl std::error::Error for Error {}
@@ -27,17 +30,22 @@ impl std::fmt::Display for Error {
             Error::VaultAlreadyExists => write!(f, "Vault already exists"),
             Error::VaultNotFound => write!(f, "Vault not found"),
             Error::EntryAlreadyExists => write!(f, "Entry already exists in vault"),
-            Error::HomeDirectoryNotFound => {write!(f, "Unable to find home directory when building path")}
+            Error::HomeDirectoryNotFound => {
+                write!(f, "Unable to find home directory when building path")
+            }
             Error::CorruptedSecret => write!(f, "Error, the secret could not be retrieved."),
             Error::Io(e) => write!(f, "IO error: {}", e),
             Error::Encryption(str) => write!(f, "Encryption error: {}", str),
             Error::MalformedVault(e) => write!(f, "Malformed vault file: {}", e),
+            Error::InvalidFormat => write!(f, "Magic mismatch: not a frankshoard file"),
+            Error::UnsupportedVersion(ver) => write!(f, "Unexpected format version: {}", ver),
             Error::MasterPasswordError(str) => write!(f, "Master password error: {}", str),
             Error::TomlError(str) => write!(f, "Toml Error : {}", str),
             Error::UrlParseError(e) => write!(f, "Url Parse Error: {}", e),
             Error::BinarySerdeError(e) => write!(f, "Error serializing/deserializing vault: {}", e),
             Error::IllegalState(str) => write!(f, "Illegal state: {}", str),
             Error::NotImplemented(str) => write!(f, "Error, feature not yet implemented: {}", str),
+            Error::EmptyCipher => write!(f, "Cipher Text cannot be empty."),
         }
     }
 }
