@@ -8,7 +8,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 pub use crate::config::{Argon2Conf, Config, UIConf};
-pub use crate::error::Error;
+pub use crate::error::{Error, TransitionError};
 pub use crate::vault::{BasicPasswordEntry, Entry, NoteEntry, SiteEntry};
 
 use crate::crypto::{MasterKey, SALT_LEN};

@@ -91,3 +91,51 @@ impl From<postcard::Error> for Error {
         Error::BinarySerdeError(e)
     }
 }
+
+pub struct TransitionError<T> {
+    error: Error,
+    hoard: T,       // The hoard (locked or unlocked) being consumed, returned in case of an error
+}
+
+impl<T> std::error::Error for TransitionError<T> {}
+
+impl<T> std::fmt::Display for TransitionError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.error, f)
+    }
+}
+
+impl<T> std::fmt::Debug for TransitionError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransitionError")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> From<TransitionError<T>> for Error {
+    fn from(e: TransitionError<T>) -> Self {
+         e.discard()
+    }
+ }
+
+impl<T> TransitionError<T> {
+    pub(crate) fn new(error: Error, hoard: T) -> Self {
+        TransitionError {
+            error,
+            hoard,
+        }
+    }
+
+    pub fn into_hoard(self) -> T {
+        self.hoard
+    }
+
+    pub fn discard(self) -> Error {
+        self.error
+    }
+
+    pub fn error(&self) -> &Error {
+        &self.error
+    }
+}

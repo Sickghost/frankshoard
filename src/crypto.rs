@@ -3,7 +3,6 @@ use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use std::fmt;
-use std::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::config::Config;
@@ -17,7 +16,6 @@ const TAG_LEN: usize = 16;   // AES-GCM authentication tag (128-bit)
 pub struct MasterKey {
     key: Zeroizing<Box<[u8]>>, // A box, because we want the key in the heap
     salt: [u8; SALT_LEN],
-    creation_time: Instant,    // TODO mechanism to handle that
 }
 
 // Won't leak actual secret to logs and such
@@ -25,7 +23,6 @@ impl fmt::Debug for MasterKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MasterKey")
             .field("key", &"**********")
-            .field("creation_time", &self.creation_time)
             .finish()
     }
 }
@@ -53,7 +50,6 @@ impl MasterKey {
         Ok(MasterKey {
             key,
             salt,
-            creation_time: Instant::now(),
         })
     }
 
