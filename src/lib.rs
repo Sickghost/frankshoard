@@ -44,7 +44,11 @@ impl LockedHoard {
     /// Returns [`Error::EmptyCipher`] if an empty hoard is badly formed for the cipher used.
     pub fn load_hoard(config: Config) -> Result<Self, Error> {
         let (salt, vault_file) = VaultFile::from_path(config.vault_file())?;
-        Ok(LockedHoard { config, vault_file, salt })
+        Ok(LockedHoard {
+            config,
+            vault_file,
+            salt,
+        })
     }
 
     /// Creates a new empty vault. Note that the vault file is persisted to
@@ -77,11 +81,21 @@ impl LockedHoard {
 
         let master_key = MasterKey::from_new_password(&password, &config)?;
 
-        let blob = crypto::encrypt_bytes(&master_key, vault::extra_aad(), &DecryptedVault::empty_vault().into_bytes()?)?;
+        let blob = crypto::encrypt_bytes(
+            &master_key,
+            vault::extra_aad(),
+            &DecryptedVault::empty_vault().to_bytes()?,
+        )?;
 
-        let vault_file = VaultFile::build_new_vault(blob);
-        let locked_hoard = LockedHoard { config, vault_file, salt: master_key.salt()};
-        locked_hoard.vault_file.save(&locked_hoard.salt, locked_hoard.config.vault_file())?;
+        let vault_file = VaultFile::from_blob(blob);
+        let locked_hoard = LockedHoard {
+            config,
+            vault_file,
+            salt: master_key.salt(),
+        };
+        locked_hoard
+            .vault_file
+            .save(&locked_hoard.salt, locked_hoard.config.vault_file())?;
         Ok(locked_hoard)
     }
 
@@ -98,9 +112,16 @@ impl LockedHoard {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decryption.
-    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
-    pub fn unlock(self, password: Zeroizing<String>) -> Result<UnlockedHoard, Error> {
+    /// On failure, returns a [`TransitionError`] holding the reason and this hoard, unchanged. Use
+    /// [`TransitionError::into_hoard`] to get the hoard back (e.g. to retry after a wrong password), or
+    /// [`TransitionError::error`] to inspect the reason, which is one of:
+    ///
+    /// * [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decryption.
+    /// * [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
+    pub fn unlock(
+        self,
+        password: Zeroizing<String>,
+    ) -> Result<UnlockedHoard, TransitionError<LockedHoard>> {
         UnlockedHoard::unlock(self, &password)
     }
 
@@ -123,23 +144,20 @@ impl LockedHoard {
         password: Zeroizing<String>,
         new_password: Zeroizing<String>,
     ) -> Result<(), Error> {
-        let snapshot = self.vault_file.clone();
+        let master_key = MasterKey::from_password_with_salt(&password, &self.config, self.salt)?;
+        let new_master_key = MasterKey::from_new_password(&new_password, &self.config)?;
+        let clear_data =
+            crypto::decrypt_bytes(&master_key, vault::extra_aad(), self.vault_file.blob())?;
+        let new_vault_file = VaultFile::from_blob(crypto::encrypt_bytes(
+            &new_master_key,
+            vault::extra_aad(),
+            &clear_data,
+        )?);
+        new_vault_file.save(&new_master_key.salt(), self.config.vault_file())?;
+        self.salt = new_master_key.salt(); // Only keep on success
+        self.vault_file = new_vault_file; // Only keep on success
 
-        // Making it "atomic"
-        let result = (|| -> Result<(), Error> {
-            let master_key = MasterKey::from_password_with_salt(&password, &self.config, self.salt)?;
-            let new_master_key = MasterKey::from_new_password(&new_password, &self.config)?;
-            let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), self.vault_file.blob())?;
-            self.vault_file.update_blob(crypto::encrypt_bytes(&new_master_key, vault::extra_aad(), &clear_data)?);
-            self.vault_file.save(&new_master_key.salt(), self.config.vault_file())?;
-            self.salt = new_master_key.salt(); // Only keep on success
-            Ok(())
-        })();
-
-        if result.is_err() {
-            self.vault_file = snapshot;
-        }
-        result
+        Ok(())
     }
 }
 
@@ -155,38 +173,40 @@ impl LockedHoard {
 #[derive(Debug)]
 pub struct UnlockedHoard {
     config: Config,
-    vault_file: VaultFile,
     master_key: MasterKey,
     decrypted_vault: DecryptedVault,
 }
 
 impl UnlockedHoard {
     /// This unlocks the vault, decrypting all entries in memory. This method consumes the `LockedHoard` to force the state change.
-    ///
-    /// # Arguments
-    ///
-    /// * `locked_hoard` - A `LockedHoard` containing the encrypted representation of the vault.
-    /// * `password` - The master password for the vault.
-    ///
-    /// # Returns
-    ///
-    /// Returns a [`UnlockedHoard`] with all entries decrypted. Note the returned vault was NOT saved to storage.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decryption.
-    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
-    fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, Error> {
-        let master_key = MasterKey::from_password_with_salt(password, &locked_hoard.config, locked_hoard.salt)?;
-        let clear_data = crypto::decrypt_bytes(&master_key, vault::extra_aad(), locked_hoard.vault_file.blob())?;
-        let decrypted_vault = DecryptedVault::from_bytes(clear_data)?;
+    /// See [[LockedHoard::unlock]].
+    fn unlock(
+        locked_hoard: LockedHoard,
+        password: &Zeroizing<String>,
+    ) -> Result<Self, TransitionError<LockedHoard>> {
+        match UnlockedHoard::decrypt_parts(&locked_hoard, password) {
+            Ok((master_key, decrypted_vault)) => Ok(UnlockedHoard {
+                config: locked_hoard.config,
+                decrypted_vault,
+                master_key,
+            }),
+            Err(e) => Err(TransitionError::new(e, locked_hoard)),
+        }
+    }
 
-        Ok(UnlockedHoard {
-            config: locked_hoard.config,
-            vault_file: locked_hoard.vault_file,
-            decrypted_vault,
-            master_key,
-        })
+    fn decrypt_parts(
+        locked_hoard: &LockedHoard,
+        password: &Zeroizing<String>,
+    ) -> Result<(MasterKey, DecryptedVault), Error> {
+        let master_key =
+            MasterKey::from_password_with_salt(password, &locked_hoard.config, locked_hoard.salt)?;
+        let clear_data = crypto::decrypt_bytes(
+            &master_key,
+            vault::extra_aad(),
+            locked_hoard.vault_file.blob(),
+        )?;
+        let decrypted_vault = DecryptedVault::from_bytes(clear_data)?;
+        Ok((master_key, decrypted_vault))
     }
 
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
@@ -204,13 +224,11 @@ impl UnlockedHoard {
     ///
     /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
-    pub fn lock_in_mem(mut self) -> Result<LockedHoard, Error> {
-        self.vault_file.update_blob(
-            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.into_bytes()?)?
-        );
+    pub fn lock_in_mem(self) -> Result<LockedHoard, Error> {
+        let vault_file = self.encrypt_vault()?;
         Ok(LockedHoard {
             config: self.config,
-            vault_file: self.vault_file,
+            vault_file,
             salt: self.master_key.salt(),
         })
     }
@@ -229,16 +247,27 @@ impl UnlockedHoard {
     /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
     /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
     /// Returns [`Error::Io`] if there is a problem writing file to storage.
-    pub fn lock_and_save(mut self) -> Result<LockedHoard, Error> {
-        self.vault_file.update_blob(
-            crypto::encrypt_bytes(&self.master_key, vault::extra_aad(), &self.decrypted_vault.into_bytes()?)?
-        );
-        self.vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
+    pub fn lock_and_save(self) -> Result<LockedHoard, Error> {
+        let vault_file = self.encrypt_vault()?;
+        vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
         Ok(LockedHoard {
             config: self.config,
-            vault_file: self.vault_file,
+            vault_file,
             salt: self.master_key.salt(),
         })
+    }
+
+    /// This saves the vault (after encrypting it) to file without locking it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
+    /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
+    /// Returns [`Error::Io`] if there is a problem writing file to storage.
+    pub fn save(&self) -> Result<(), Error> {
+        let vault_file = self.encrypt_vault()?;
+        vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
+        Ok(())
     }
 
     /// Add an entry to the vault
@@ -310,5 +339,14 @@ impl UnlockedHoard {
     /// * `None` - If no entry exists with the provided `uuid`.
     pub fn remove_entry(&mut self, uuid: Uuid) -> Option<Entry> {
         self.decrypted_vault.remove_entry(uuid)
+    }
+
+    fn encrypt_vault(&self) -> Result<VaultFile, Error> {
+        let vault_file = VaultFile::from_blob(crypto::encrypt_bytes(
+            &self.master_key,
+            vault::extra_aad(),
+            &self.decrypted_vault.to_bytes()?,
+        )?);
+        Ok(vault_file)
     }
 }

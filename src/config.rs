@@ -1,9 +1,9 @@
 use dirs::home_dir;
-use std::fs::OpenOptions;
-use std::os::unix::fs::OpenOptionsExt;
-use std::io::Write;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::error::Error;
@@ -17,7 +17,11 @@ pub struct Argon2Conf {
 
 impl Argon2Conf {
     pub fn new(memory: u32, iterations: u32, parallelism: u32) -> Self {
-        Argon2Conf { memory, iterations, parallelism }
+        Argon2Conf {
+            memory,
+            iterations,
+            parallelism,
+        }
     }
 
     pub fn memory(&self) -> u32 {
@@ -40,7 +44,9 @@ pub struct UIConf {
 
 impl UIConf {
     pub fn new(session_timeout_seconds: u32) -> Self {
-        UIConf { session_timeout_seconds }
+        UIConf {
+            session_timeout_seconds,
+        }
     }
     pub fn session_timeout_seconds(&self) -> u32 {
         self.session_timeout_seconds
@@ -58,7 +64,11 @@ pub struct Config {
 impl Config {
     pub fn new(vault_path: PathBuf, argon2: Argon2Conf, ui: UIConf) -> Result<Self, Error> {
         let vault_file = expand_tilde(&vault_path)?;
-        Ok(Config { vault_file, argon2, ui })
+        Ok(Config {
+            vault_file,
+            argon2,
+            ui,
+        })
     }
 
     pub fn from_path(path: &Path) -> Result<Self, Error> {
@@ -75,7 +85,12 @@ impl Config {
             fs::create_dir_all(parent)?;
         }
 
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
         file.write_all(toml_str.as_bytes())?;
         drop(file);
 

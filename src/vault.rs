@@ -1,17 +1,17 @@
-use postcard::{from_bytes, to_allocvec};
+use postcard::{from_bytes, to_slice};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
-use std::sync::OnceLock;
 use std::path::Path;
+use std::sync::OnceLock;
 use url::Url;
 use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{SALT_LEN};
+use crate::crypto::SALT_LEN;
 use crate::error::Error;
 use crate::secretbuf::SecretBuf;
 
@@ -301,13 +301,20 @@ impl DecryptedVault {
         Ok(vault)
     }
 
-    pub fn empty_vault()-> Self {
-        DecryptedVault { entries: Vec::new(), }
+    pub fn empty_vault() -> Self {
+        DecryptedVault {
+            entries: Vec::new(),
+        }
     }
 
-    pub fn into_bytes(self) -> Result<Zeroizing<Vec<u8>>, Error> {
-        let clear_data = Zeroizing::new(to_allocvec(&self)?);
-        Ok(clear_data)
+    pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
+        // We get the actual size of the data to serialize to avoid postcard re-allocating Vec in memory
+        // as the structure grows, to avoid copy of sensitive data in memory.
+        let size = postcard::experimental::serialized_size(self)?;
+        let mut clear_data_buffer = Zeroizing::new(vec![0u8; size]);
+        let size_used = to_slice(self, &mut clear_data_buffer)?.len();
+        debug_assert_eq!(size, size_used);
+        Ok(clear_data_buffer)
     }
 
     pub fn add_entry(&mut self, item: Entry) -> Result<(), Error> {
@@ -345,10 +352,8 @@ pub struct VaultFile {
 }
 
 impl VaultFile {
-    pub fn build_new_vault(blob: Vec<u8>) -> Self {
-        VaultFile {
-            blob,
-        }
+    pub fn from_blob(blob: Vec<u8>) -> Self {
+        VaultFile { blob }
     }
 
     pub fn from_path(path: &Path) -> Result<([u8; SALT_LEN], Self), Error> {
@@ -360,32 +365,35 @@ impl VaultFile {
         let mut cursor = Cursor::new(bytes);
 
         let mut magic = [0u8; MAGIC.len()];
-        cursor.read_exact(&mut magic).map_err(Error::MalformedVault)?;
+        cursor
+            .read_exact(&mut magic)
+            .map_err(Error::MalformedVault)?;
         if &magic != MAGIC {
             return Err(Error::InvalidFormat);
         }
 
         let mut format_version = [0u8; 1];
-        cursor.read_exact(&mut format_version).map_err(Error::MalformedVault)?;
+        cursor
+            .read_exact(&mut format_version)
+            .map_err(Error::MalformedVault)?;
         if format_version[0] != FORMAT_VERSION {
             return Err(Error::UnsupportedVersion(format_version[0]));
         }
 
         let mut salt = [0u8; SALT_LEN];
-        cursor.read_exact(&mut salt).map_err(Error::MalformedVault)?;
+        cursor
+            .read_exact(&mut salt)
+            .map_err(Error::MalformedVault)?;
 
         let mut blob = Vec::new();
-        cursor.read_to_end(&mut blob).map_err(Error::MalformedVault)?;
+        cursor
+            .read_to_end(&mut blob)
+            .map_err(Error::MalformedVault)?;
         if blob.is_empty() {
             return Err(Error::EmptyCipher);
         }
 
-        Ok((
-            salt,
-            VaultFile {
-                blob,
-            },
-        ))
+        Ok((salt, VaultFile { blob }))
     }
 
     pub fn save(&self, salt: &[u8; SALT_LEN], path: &Path) -> Result<(), Error> {
@@ -425,10 +433,6 @@ impl VaultFile {
             let _ = fs::remove_file(&tmp_path); // best effort cleanup
         }
         result
-    }
-
-    pub fn update_blob(&mut self, blob: Vec<u8>) {
-        self.blob = blob;
     }
 
     pub fn blob(&self) -> &[u8] {

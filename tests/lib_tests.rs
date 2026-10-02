@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod hoard_test {
-    use tempfile::{TempDir, tempdir};
     use std::fs;
     use std::fs::File;
+    use tempfile::{TempDir, tempdir};
     use url::Url;
     use uuid::Uuid;
     use zeroize::Zeroizing;
@@ -183,7 +183,12 @@ mod hoard_test {
         let vault_dir = tempdir().unwrap();
         create_test_empty_vault(&vault_dir);
         let config = create_test_config(&vault_dir);
-        File::options().write(true).open(&config.vault_file()).unwrap().set_len(4).unwrap(); // truncating to MAGIC length
+        File::options()
+            .write(true)
+            .open(&config.vault_file())
+            .unwrap()
+            .set_len(4)
+            .unwrap(); // truncating to MAGIC length
 
         let err = LockedHoard::load_hoard(config).unwrap_err();
         assert!(matches!(err, Error::MalformedVault(..)), "got: {err:?}");
@@ -194,7 +199,12 @@ mod hoard_test {
         let vault_dir = tempdir().unwrap();
         create_test_empty_vault(&vault_dir);
         let config = create_test_config(&vault_dir);
-        File::options().write(true).open(&config.vault_file()).unwrap().set_len(37).unwrap(); // Truncate after header
+        File::options()
+            .write(true)
+            .open(&config.vault_file())
+            .unwrap()
+            .set_len(37)
+            .unwrap(); // Truncate after header
 
         let err = LockedHoard::load_hoard(config).unwrap_err();
         assert!(matches!(err, Error::EmptyCipher), "got: {err:?}");
@@ -205,10 +215,17 @@ mod hoard_test {
         let vault_dir = tempdir().unwrap();
         create_test_empty_vault(&vault_dir);
         let config = create_test_config(&vault_dir);
-        File::options().write(true).open(&config.vault_file()).unwrap().set_len(55).unwrap(); // blob = 18 bytes, below NONCE_LEN + TAG_LEN minimum
+        File::options()
+            .write(true)
+            .open(&config.vault_file())
+            .unwrap()
+            .set_len(55)
+            .unwrap(); // blob = 18 bytes, below NONCE_LEN + TAG_LEN minimum
 
         let locked = LockedHoard::load_hoard(config).unwrap();
-        let err = locked.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap_err();
+        let err = locked
+            .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
+            .unwrap_err();
         assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
     }
 
@@ -257,7 +274,9 @@ mod hoard_test {
         std::fs::write(path, &bytes).unwrap();
 
         let locked = LockedHoard::load_hoard(config).unwrap();
-        let err = locked.unlock(Zeroizing::new(MASTER_PASSWORD.to_string())).unwrap_err();
+        let err = locked
+            .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
+            .unwrap_err();
         assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
     }
 
@@ -319,8 +338,13 @@ mod hoard_test {
         );
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
 
-        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
-        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", test_new_pwd_result);
+        let test_new_pwd_result =
+            locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(
+            test_new_pwd_result.is_ok(),
+            "expected Ok but got {:?}",
+            test_new_pwd_result
+        );
     }
 
     #[test]
@@ -333,8 +357,13 @@ mod hoard_test {
         );
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
 
-        let test_new_pwd_result = locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
-        assert!(test_new_pwd_result.is_ok(), "expected Ok but got {:?}", test_new_pwd_result);
+        let test_new_pwd_result =
+            locked_hoard.unlock(Zeroizing::new(NEW_MASTER_PASSWORD.to_string()));
+        assert!(
+            test_new_pwd_result.is_ok(),
+            "expected Ok but got {:?}",
+            test_new_pwd_result
+        );
     }
 
     #[test]
@@ -362,7 +391,8 @@ mod hoard_test {
         let mut locked_hoard = LockedHoard::new_hoard(
             create_test_config(&vault_dir),
             Zeroizing::new(MASTER_PASSWORD.to_string()),
-        ).unwrap();
+        )
+        .unwrap();
 
         // make the DIRECTORY read-only so save fails.  Directory, not file since we use an intermediate file  when saving.
         let mut perms = fs::metadata(vault_dir.path()).unwrap().permissions();
@@ -385,7 +415,6 @@ mod hoard_test {
 
         let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
-
     }
 
     #[test]
