@@ -180,10 +180,7 @@ pub struct UnlockedHoard {
 impl UnlockedHoard {
     /// This unlocks the vault, decrypting all entries in memory. This method consumes the `LockedHoard` to force the state change.
     /// See [[LockedHoard::unlock]].
-    fn unlock(
-        locked_hoard: LockedHoard,
-        password: &Zeroizing<String>,
-    ) -> Result<Self, TransitionError<LockedHoard>> {
+    fn unlock(locked_hoard: LockedHoard, password: &Zeroizing<String>) -> Result<Self, TransitionError<LockedHoard>> {
         match UnlockedHoard::decrypt_parts(&locked_hoard, password) {
             Ok((master_key, decrypted_vault)) => Ok(UnlockedHoard {
                 config: locked_hoard.config,
@@ -222,15 +219,21 @@ impl UnlockedHoard {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
-    /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
-    pub fn lock_in_mem(self) -> Result<LockedHoard, Error> {
-        let vault_file = self.encrypt_vault()?;
-        Ok(LockedHoard {
-            config: self.config,
-            vault_file,
-            salt: self.master_key.salt(),
-        })
+    /// On failure, returns a [`TransitionError`] holding the reason and this hoard, unchanged. Use
+    /// [`TransitionError::into_hoard`] to get the hoard back (e.g. to retry after a wrong password), or
+    /// [`TransitionError::error`] to inspect the reason, which is one of:
+    ///
+    /// * [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
+    /// * [`Error::Encryption`] if there was a problem encrypting the vault.
+    pub fn lock_in_mem(self) -> Result<LockedHoard, TransitionError<UnlockedHoard>> {
+        match self.encrypt_vault() {
+            Ok(vault_file) => Ok(LockedHoard {
+                config: self.config,
+                vault_file,
+                salt: self.master_key.salt(),
+            }),
+            Err(e) => Err(TransitionError::new(e, self)),
+        }
     }
 
     /// This locks the vault, encrypts any changes and returns a LockedHoard Object.
@@ -244,17 +247,22 @@ impl UnlockedHoard {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
-    /// Returns [`Error::Encryption`] if there was a problem encrypting the vault.
-    /// Returns [`Error::Io`] if there is a problem writing file to storage.
-    pub fn lock_and_save(self) -> Result<LockedHoard, Error> {
-        let vault_file = self.encrypt_vault()?;
-        vault_file.save(&self.master_key.salt(), self.config.vault_file())?;
-        Ok(LockedHoard {
-            config: self.config,
-            vault_file,
-            salt: self.master_key.salt(),
-        })
+    /// On failure, returns a [`TransitionError`] holding the reason and this hoard, unchanged. Use
+    /// [`TransitionError::into_hoard`] to get the hoard back (e.g. to retry after a wrong password), or
+    /// [`TransitionError::error`] to inspect the reason, which is one of:
+    ///
+    /// * [`Error::BinarySerdeError`] if there was a problem serializing the vault entries before encryption.
+    /// * [`Error::Encryption`] if there was a problem encrypting the vault.
+    /// * [`Error::Io`] if there is a problem writing file to storage.
+    pub fn lock_and_save(self) -> Result<LockedHoard, TransitionError<UnlockedHoard>> {
+        let vault_file = match self.encrypt_vault() {
+            Ok(vault_file) => vault_file,
+            Err(e) => return Err(TransitionError::new(e, self)),
+        };
+        if let Err(e) = vault_file.save(&self.master_key.salt(), self.config.vault_file()) {
+            return Err(TransitionError::new(e, self));
+        }
+        Ok(LockedHoard { config: self.config, vault_file, salt: self.master_key.salt() })
     }
 
     /// This saves the vault (after encrypting it) to file without locking it.
