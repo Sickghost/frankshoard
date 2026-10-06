@@ -155,6 +155,18 @@ mod hoard_test {
         (result.unwrap(), uuids)
     }
 
+    // Helper function use to make sure whatever `T` type used when calling it is "send ready" (i.e. Send + 'static) so we can use it
+    // with tokio spawn_blocking.  This is more for future proofing as the types are ok for now.
+    fn assert_send<T: Send + 'static>() {}
+
+    #[test]
+    fn hoards_are_send() {
+        assert_send::<LockedHoard>();
+        assert_send::<UnlockedHoard>();
+        assert_send::<TransitionError<LockedHoard>>();
+        assert_send::<TransitionError<UnlockedHoard>>();
+    }
+
     #[test]
     fn create_new_empty_hoard() {
         let vault_dir = tempdir().unwrap();
@@ -300,7 +312,8 @@ mod hoard_test {
         let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let unlocked_hoard = result.unwrap();
-        assert!(unlocked_hoard.get_entries().len() == 0)
+        assert_eq!(unlocked_hoard.get_entries().len(), 0)
+
     }
 
     #[test]
@@ -311,7 +324,7 @@ mod hoard_test {
         let result = locked_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let unlocked_hoard = result.unwrap();
-        assert!(unlocked_hoard.get_entries().len() == 6);
+        assert_eq!(unlocked_hoard.get_entries().len(), 6);
     }
 
     #[test]
@@ -324,6 +337,21 @@ mod hoard_test {
             .unwrap_err();
         let error = err.error();
         assert!(matches!(error, Error::Encryption(_)), "got: {error:?}");
+    }
+
+    #[test]
+    fn unlock_hoard_wrong_password_then_good_password() {
+        let vault_dir = tempdir().unwrap();
+        let locked_hoard = get_empty_hoard(&vault_dir);
+
+        let err = locked_hoard
+            .unlock(Zeroizing::new(WRONG_PASSWORD.to_string()))
+            .unwrap_err();
+        assert!(matches!(err.error(), Error::Encryption(_)), "got: {err:?}");
+
+        let recovered_hoard = err.into_hoard();
+        let result = recovered_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
     }
 
     #[test]
@@ -426,7 +454,7 @@ mod hoard_test {
         let (unlocked_hoard, uuids) = get_filled_unlocked_hoard(&vault_dir);
 
         let entries = unlocked_hoard.get_entries();
-        assert!(entries.len() == 6);
+        assert_eq!(entries.len(), 6);
 
         // Note: this series of assertion work because no delete occurs before. If that was to change,
         // the test would break because deleting entries will change the internal ordering of the vault.
@@ -529,6 +557,67 @@ mod hoard_test {
     }
 
     #[test]
+    fn save_vault_stays_open() {
+        let vault_dir = tempdir().unwrap();
+        let locked_hoard = LockedHoard::new_hoard(
+            create_test_config(&vault_dir),
+            Zeroizing::new(MASTER_PASSWORD.to_string()),
+        )
+        .unwrap();
+        let mut unlocked_hoard = locked_hoard
+            .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
+            .unwrap();
+
+        let basic_password_entry = Entry::BasicPassword(
+            BasicPasswordEntry::new(
+                Zeroizing::new("This Is The Vault Password".to_string()),
+                Zeroizing::new("Bubba Hotep".to_string()),
+                Zeroizing::new("secret123#!".to_string()),
+            )
+            .unwrap(),
+        );
+
+        let result = unlocked_hoard.add_entry(basic_password_entry);
+        assert!(result.is_ok(), "expected Ok but got {:?}", result);
+        let save_result = unlocked_hoard.save();
+        assert!(save_result.is_ok(), "expected Ok but got {:?}", save_result);
+
+        assert_eq!(unlocked_hoard.get_entries().len(), 1);
+
+        // check data was saved
+        let locked_hoard_reloaded =
+            LockedHoard::load_hoard(create_test_config(&vault_dir)).unwrap();
+        let unlocked_hoard_reloaded = locked_hoard_reloaded
+            .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
+            .unwrap();
+        assert_eq!(unlocked_hoard_reloaded.get_entries().len(), 1);
+    }
+
+    #[test]
+    fn lock_and_save_failed_return_vault() {
+        let vault_dir = tempdir().unwrap();
+
+        let (unlocked_hoard, _) = get_filled_unlocked_hoard(&vault_dir);
+
+        // make the DIRECTORY read-only so save fails.  Directory, not file since we use an intermediate file when saving.
+        let mut perms = fs::metadata(vault_dir.path()).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(vault_dir.path(), perms).unwrap();
+
+        let err = unlocked_hoard.lock_and_save().unwrap_err();
+
+        // restore write access so test can cleanup
+        let mut perms = fs::metadata(vault_dir.path()).unwrap().permissions();
+        perms.set_readonly(false);
+        fs::set_permissions(vault_dir.path(), perms).unwrap();
+
+        assert!(matches!(err.error(), Error::Io(_)), "got: {err:?}");
+        let recovered_hoard: UnlockedHoard = err.into_hoard();
+        let entries = recovered_hoard.get_entries();
+        assert_eq!(entries.len(), 6);
+    }
+
+    #[test]
     fn delete_entry() {
         let vault_dir = tempdir().unwrap();
         let (mut unlocked_hoard, _) = get_filled_unlocked_hoard(&vault_dir);
@@ -546,7 +635,7 @@ mod hoard_test {
             assert!(option.is_some(), "expected Some(Entry) but got None");
             assert_eq!(option.unwrap().id(), id);
         }
-        assert!(unlocked_hoard.get_entries().len() == 0)
+        assert_eq!(unlocked_hoard.get_entries().len(), 0)
     }
 
     #[test]
