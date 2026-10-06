@@ -226,7 +226,8 @@ mod hoard_test {
         let err = locked
             .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
             .unwrap_err();
-        assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
+        let error = err.error();
+        assert!(matches!(error, Error::Encryption(..)), "got: {error:?}");
     }
 
     #[test]
@@ -277,7 +278,8 @@ mod hoard_test {
         let err = locked
             .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
             .unwrap_err();
-        assert!(matches!(err, Error::Encryption(..)), "got: {err:?}");
+        let error = err.error();
+        assert!(matches!(error, Error::Encryption(..)), "got: {error:?}");
     }
 
     #[test]
@@ -320,7 +322,8 @@ mod hoard_test {
         let err = locked_hoard
             .unlock(Zeroizing::new(WRONG_PASSWORD.to_string()))
             .unwrap_err();
-        assert!(matches!(err, Error::Encryption(_)));
+        let error = err.error();
+        assert!(matches!(error, Error::Encryption(_)), "got: {error:?}");
     }
 
     #[test]
