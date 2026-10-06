@@ -116,8 +116,11 @@ impl LockedHoard {
     /// [`TransitionError::into_hoard`] to get the hoard back (e.g. to retry after a wrong password), or
     /// [`TransitionError::error`] to inspect the reason, which is one of:
     ///
+    /// * [`Error::VaultWrongPasswordOrCorrupted`] if the password is wrong, or if the vault data or header was modified
+    ///   or damaged. The two cases cannot be told apart.
     /// * [`Error::BinarySerdeError`] if there was a problem deserializing the vault entries after decryption.
-    /// * [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting the vault.
+    /// * [`Error::Encryption`] if there was a problem deriving the master key from the password, or if the vault data is
+    ///   too short to be decrypted.
     pub fn unlock(
         self,
         password: Zeroizing<String>,
@@ -137,7 +140,10 @@ impl LockedHoard {
     ///
     /// Note that on any error, the vault state is preserved to what it was prior to the call.
     ///
-    /// Returns [`Error::Encryption`] if there was a problem deriving the master key from the password or decrypting/encrypting the vault.
+    /// Returns [`Error::VaultWrongPasswordOrCorrupted`] if `password` is wrong, or if the vault data or header was
+    /// modified or damaged. The two cases cannot be told apart.
+    /// Returns [`Error::Encryption`] if there was a problem deriving the master keys from the passwords, encrypting the
+    /// vault, or if the vault data is too short to be decrypted.
     /// Returns [`Error::Io`] if there is an issue persisting the vault to storage.
     pub fn change_password(
         &mut self,

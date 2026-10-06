@@ -116,12 +116,16 @@ pub fn decrypt_bytes(
 
     let nonce = Nonce::from_slice(nonce_bytes);
     let aad: Vec<u8> = [extra_aad, master_key.salt.as_slice()].concat();
-    let plaintext = Zeroizing::new(cipher.decrypt(
-        nonce,
-        Payload {
-            msg: ciphertext,
-            aad: &aad,
-        },
-    )?);
+    let plaintext = Zeroizing::new(
+        cipher
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: ciphertext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| Error::VaultWrongPasswordOrCorrupted)?,
+    );
     Ok(plaintext)
 }

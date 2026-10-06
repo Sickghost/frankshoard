@@ -58,3 +58,35 @@ It re-encrypts the vault and then throws the result away. Dropping the `Unlocked
 - **Serialization format stability:** postcard encodes enum variants by position and fields by order. Reordering `Entry` variants or struct fields will break existing vaults, so bump `FORMAT_VERSION` whenever you do that.
 - **Unix only:** `std::os::unix` is used in `config.rs` and `vault.rs`, so the crate won't compile on Windows. Document this in the README.
 - **Unused pieces:** `UIConf.session_timeout_seconds`, `MasterKey.creation_time`, and the `MasterPasswordError`, `IllegalState` and `NotImplemented` error variants aren't used yet.
+
+## Tests
+
+### Read-only directory tests can leave temp folders behind
+`tests/lib_tests.rs`: `lock_and_save_failed_return_vault` and `change_password_failed_save_preserve_old_vault`.
+
+Both tests make the vault directory read-only so saving fails, then make it writable again so `TempDir` can delete it. If anything panics between those two steps (e.g. `unwrap_err()` because the save unexpectedly succeeded), write access is never restored. `TempDir`'s cleanup then fails silently, and the folder stays in the system temp directory. This only happens when a test is already failing.
+
+**Fix:** use a guard type whose `Drop` restores the permissions. Rust has no `finally`, but `Drop` also runs while a panic unwinds the stack (a failed `assert!` is a panic), so it plays the same role.
+
+```rust
+struct ReadOnlyDir<'a>(&'a Path);
+
+impl<'a> ReadOnlyDir<'a> {
+    fn new(path: &'a Path) -> Self {
+        // set read-only here
+        ReadOnlyDir(path)
+    }
+}
+
+impl Drop for ReadOnlyDir<'_> {
+    fn drop(&mut self) {
+        // set writable again here; ignore errors, never panic inside drop
+    }
+}
+```
+
+In each test, `let _readonly = ReadOnlyDir::new(vault_dir.path());` replaces both permission blocks. Details:
+- Bind it to a name like `_readonly`, not `_`: `let _ = ...` drops the guard immediately.
+- Locals are dropped in reverse declaration order, so the guard (declared after `vault_dir`) restores write access before `TempDir` deletes the folder.
+- Don't `unwrap()` inside `drop`: panicking while already unwinding aborts the test run.
+- Alternative: the `scopeguard` crate's `defer!` macro.

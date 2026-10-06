@@ -3,6 +3,7 @@
 
 #[derive(Debug)]
 pub enum Error {
+    VaultWrongPasswordOrCorrupted,
     VaultAlreadyExists,
     VaultNotFound,
     EntryAlreadyExists,
@@ -27,6 +28,9 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Error::VaultWrongPasswordOrCorrupted => {
+                write!(f, "Wrong password or vault file is corrupted")
+            }
             Error::VaultAlreadyExists => write!(f, "Vault already exists"),
             Error::VaultNotFound => write!(f, "Vault not found"),
             Error::EntryAlreadyExists => write!(f, "Entry already exists in vault"),

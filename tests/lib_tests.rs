@@ -291,7 +291,10 @@ mod hoard_test {
             .unlock(Zeroizing::new(MASTER_PASSWORD.to_string()))
             .unwrap_err();
         let error = err.error();
-        assert!(matches!(error, Error::Encryption(..)), "got: {error:?}");
+        assert!(
+            matches!(error, Error::VaultWrongPasswordOrCorrupted),
+            "got: {error:?}"
+        );
     }
 
     #[test]
@@ -313,7 +316,6 @@ mod hoard_test {
         assert!(result.is_ok(), "expected Ok but got {:?}", result);
         let unlocked_hoard = result.unwrap();
         assert_eq!(unlocked_hoard.get_entries().len(), 0)
-
     }
 
     #[test]
@@ -336,7 +338,10 @@ mod hoard_test {
             .unlock(Zeroizing::new(WRONG_PASSWORD.to_string()))
             .unwrap_err();
         let error = err.error();
-        assert!(matches!(error, Error::Encryption(_)), "got: {error:?}");
+        assert!(
+            matches!(error, Error::VaultWrongPasswordOrCorrupted),
+            "got: {error:?}"
+        );
     }
 
     #[test]
@@ -347,7 +352,10 @@ mod hoard_test {
         let err = locked_hoard
             .unlock(Zeroizing::new(WRONG_PASSWORD.to_string()))
             .unwrap_err();
-        assert!(matches!(err.error(), Error::Encryption(_)), "got: {err:?}");
+        assert!(
+            matches!(err.error(), Error::VaultWrongPasswordOrCorrupted),
+            "got: {err:?}"
+        );
 
         let recovered_hoard = err.into_hoard();
         let result = recovered_hoard.unlock(Zeroizing::new(MASTER_PASSWORD.to_string()));
@@ -412,7 +420,7 @@ mod hoard_test {
                 Zeroizing::new(NEW_MASTER_PASSWORD.to_string()),
             )
             .unwrap_err();
-        assert!(matches!(err, Error::Encryption(_)));
+        assert!(matches!(err, Error::VaultWrongPasswordOrCorrupted));
     }
 
     #[test]
