@@ -89,7 +89,6 @@ The combination of Rust's memory safety guarantees and carefully chosen cryptogr
 - [x] Add "silent mode"
 - [x] Integration Test Suite
 - [ ] Add a TUI (ratatui)
-- [ ] Add a threaded timer to manage master_key lifecycle. (tokio)
 
 ---
 
