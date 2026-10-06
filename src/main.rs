@@ -265,8 +265,10 @@ fn add(
         }
         AddCommands::Note { entry_name } => {
             let note_string = Zeroizing::new(
-                Input::new().with_prompt("Please enter your secret note: ").interact_text()?
-                );
+                Input::new()
+                    .with_prompt("Please enter your secret note: ")
+                    .interact_text()?,
+            );
             let entry = Entry::Note(NoteEntry::new(entry_name, note_string)?);
             println!("{}", entry.id());
             unlocked_hoard.add_entry(entry)?;
